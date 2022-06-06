@@ -1,0 +1,45 @@
+[0.007s][info][gc,heap] Heap region size: 1M
+[0.008s][info][gc     ] Using G1
+[0.008s][info][gc,heap,coops] Heap address: 0x00000007fec00000, size: 20 MB, Compressed Oops mode: Zero based, Oop shift amount: 3
+[0.077s][info][gc,start     ] GC(0) Pause Young (Concurrent Start) (G1 Humongous Allocation)
+[0.078s][info][gc,task      ] GC(0) Using 2 workers of 10 for evacuation
+[0.079s][info][gc,phases    ] GC(0)   Pre Evacuate Collection Set: 0.0ms
+[0.079s][info][gc,phases    ] GC(0)   Evacuate Collection Set: 1.0ms
+[0.079s][info][gc,phases    ] GC(0)   Post Evacuate Collection Set: 0.1ms
+[0.079s][info][gc,phases    ] GC(0)   Other: 0.3ms
+[0.079s][info][gc,heap      ] GC(0) Eden regions: 1->0(1)
+[0.079s][info][gc,heap      ] GC(0) Survivor regions: 0->1(1)
+[0.079s][info][gc,heap      ] GC(0) Old regions: 0->0
+[0.079s][info][gc,heap      ] GC(0) Humongous regions: 8->2
+[0.079s][info][gc,metaspace ] GC(0) Metaspace: 3444K->3444K(1056768K)
+[0.079s][info][gc           ] GC(0) Pause Young (Concurrent Start) (G1 Humongous Allocation) 8M->2M(20M) 1.483ms
+[0.079s][info][gc,cpu       ] GC(0) User=0.00s Sys=0.00s Real=0.00s
+[0.079s][info][gc           ] GC(1) Concurrent Cycle
+[0.079s][info][gc,marking   ] GC(1) Concurrent Clear Claimed Marks
+[0.079s][info][gc,marking   ] GC(1) Concurrent Clear Claimed Marks 0.020ms
+[0.079s][info][gc,marking   ] GC(1) Concurrent Scan Root Regions
+[0.079s][info][gc,marking   ] GC(1) Concurrent Scan Root Regions 0.434ms
+[0.080s][info][gc,marking   ] GC(1) Concurrent Mark (0.080s)
+[0.080s][info][gc,marking   ] GC(1) Concurrent Mark From Roots
+[0.080s][info][gc,task      ] GC(1) Using 3 workers of 3 for marking
+[0.080s][info][gc,marking   ] GC(1) Concurrent Mark From Roots 0.188ms
+[0.080s][info][gc,marking   ] GC(1) Concurrent Preclean
+[0.080s][info][gc,marking   ] GC(1) Concurrent Preclean 0.030ms
+[0.080s][info][gc,marking   ] GC(1) Concurrent Mark (0.080s, 0.080s) 0.253ms
+[0.080s][info][gc,start     ] GC(1) Pause Remark
+[0.081s][info][gc,stringtable] GC(1) Cleaned string and symbol table, strings: 1374 processed, 0 removed, symbols: 16203 processed, 0 removed
+[0.081s][info][gc            ] GC(1) Pause Remark 12M->12M(20M) 0.484ms
+[0.081s][info][gc,cpu        ] GC(1) User=0.00s Sys=0.00s Real=0.00s
+[0.081s][info][gc,marking    ] GC(1) Concurrent Rebuild Remembered Sets
+[0.081s][info][gc,marking    ] GC(1) Concurrent Rebuild Remembered Sets 0.034ms
+[0.081s][info][gc,start      ] GC(1) Pause Cleanup
+[0.081s][info][gc            ] GC(1) Pause Cleanup 14M->14M(20M) 0.038ms
+[0.081s][info][gc,cpu        ] GC(1) User=0.00s Sys=0.00s Real=0.00s
+[0.081s][info][gc,marking    ] GC(1) Concurrent Cleanup for Next Mark
+[0.081s][info][gc,marking    ] GC(1) Concurrent Cleanup for Next Mark 0.165ms
+[0.081s][info][gc            ] GC(1) Concurrent Cycle 2.480ms
+[0.082s][info][gc,heap,exit  ] Heap
+[0.082s][info][gc,heap,exit  ]  garbage-first heap   total 20480K, used 14844K [0x00000007fec00000, 0x0000000800000000)
+[0.082s][info][gc,heap,exit  ]   region size 1024K, 2 young (2048K), 1 survivors (1024K)
+[0.082s][info][gc,heap,exit  ]  Metaspace       used 3453K, capacity 4486K, committed 4864K, reserved 1056768K
+[0.082s][info][gc,heap,exit  ]   class space    used 307K, capacity 386K, committed 512K, reserved 1048576K

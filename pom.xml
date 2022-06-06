@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>learn</artifactId>
+    <packaging>pom</packaging>
+    <version>1.0-SNAPSHOT</version>
+    <modules>
+        <module>leaderZk</module>
+        <module>register-client</module>
+        <module>register-server</module>
+        <module>spi-demon</module>
+        <module>dubbo-spi-api</module>
+        <module>dubbo-spi-impl</module>
+        <module>learn-jvm</module>
+        <module>learn-agent</module>
+        <module>learn-agent-client</module>
+        <module>learn-demo-dubbo</module>
+        <module>leader-bytecode</module>
+        <module>leetCode</module>
+        <module>learn-disruptor</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.20</version>
+        </dependency>
+    </dependencies>
+</project>

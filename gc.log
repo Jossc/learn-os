@@ -1,0 +1,21 @@
+[0.008s][info][gc,heap] Heap region size: 1M
+[0.008s][info][gc     ] Using G1
+[0.008s][info][gc,heap,coops] Heap address: 0x00000007ffc00000, size: 4 MB, Compressed Oops mode: Zero based, Oop shift amount: 3
+[0.078s][info][gc,start     ] GC(0) Pause Young (Normal) (G1 Evacuation Pause)
+[0.078s][info][gc,task      ] GC(0) Using 2 workers of 10 for evacuation
+[0.079s][info][gc,phases    ] GC(0)   Pre Evacuate Collection Set: 0.0ms
+[0.079s][info][gc,phases    ] GC(0)   Evacuate Collection Set: 0.8ms
+[0.079s][info][gc,phases    ] GC(0)   Post Evacuate Collection Set: 0.0ms
+[0.079s][info][gc,phases    ] GC(0)   Other: 0.2ms
+[0.079s][info][gc,heap      ] GC(0) Eden regions: 1->0(1)
+[0.079s][info][gc,heap      ] GC(0) Survivor regions: 0->1(1)
+[0.079s][info][gc,heap      ] GC(0) Old regions: 0->0
+[0.079s][info][gc,heap      ] GC(0) Humongous regions: 0->0
+[0.079s][info][gc,metaspace ] GC(0) Metaspace: 3452K->3452K(1056768K)
+[0.079s][info][gc           ] GC(0) Pause Young (Normal) (G1 Evacuation Pause) 1M->0M(4M) 1.055ms
+[0.079s][info][gc,cpu       ] GC(0) User=0.00s Sys=0.00s Real=0.00s
+[0.084s][info][gc,heap,exit ] Heap
+[0.084s][info][gc,heap,exit ]  garbage-first heap   total 4096K, used 524K [0x00000007ffc00000, 0x0000000800000000)
+[0.084s][info][gc,heap,exit ]   region size 1024K, 2 young (2048K), 1 survivors (1024K)
+[0.084s][info][gc,heap,exit ]  Metaspace       used 3509K, capacity 4490K, committed 4864K, reserved 1056768K
+[0.084s][info][gc,heap,exit ]   class space    used 312K, capacity 386K, committed 512K, reserved 1048576K
