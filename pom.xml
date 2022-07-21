@@ -23,6 +23,7 @@
         <module>leetCode</module>
         <module>learn-disruptor</module>
         <module>learn-redis</module>
+        <module>learn-etcd</module>
     </modules>
 
     <properties>
