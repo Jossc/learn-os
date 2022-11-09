@@ -4,6 +4,7 @@ import org.openjdk.jol.info.ClassLayout;
 import org.openjdk.jol.info.GraphLayout;
 
 import java.util.HashMap;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * @Description: DemonOne
@@ -20,6 +21,7 @@ public class DemonOne {
         HashMap hashMap = new HashMap();
         hashMap.put("123123", "213123");
         System.out.println(GraphLayout.parseInstance(hashMap).toPrintable());
+        LockSupport.park();
     }
 
 }
