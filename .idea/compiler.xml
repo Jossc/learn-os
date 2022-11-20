@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile default="true" name="Default" enabled="true" />
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="spi-demon" />
+        <module name="register-server" />
+        <module name="learn-redis" />
+        <module name="leetCode" />
+        <module name="learn-jvm" />
+        <module name="register-client" />
+        <module name="learn-etcd" />
+        <module name="leaderZk" />
+        <module name="learn-demo-dubbo" />
+        <module name="dubbo-spi-api" />
+        <module name="dubbo-spi-impl" />
+        <module name="learn-agent" />
+        <module name="learn-agent-client" />
+        <module name="leader-bytecode" />
+        <module name="learn-disruptor" />
+      </profile>
+    </annotationProcessing>
+  </component>
+</project>
