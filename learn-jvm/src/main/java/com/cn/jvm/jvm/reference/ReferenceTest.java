@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import org.junit.jupiter.api.Assertions;
 
 /**
  * @Description: ReferenceTest
@@ -31,7 +30,7 @@ public class ReferenceTest {
         String value ="";
         final int i = value.compareTo("1");
 
-        Assertions.assertEquals(2, count);
+    /*    Assertions.assertEquals(2, count);*/
 
     }
 

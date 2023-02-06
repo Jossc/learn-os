@@ -24,6 +24,7 @@
         <module>learn-disruptor</module>
         <module>learn-redis</module>
         <module>learn-etcd</module>
+        <module>learn-netty</module>
     </modules>
 
     <properties>

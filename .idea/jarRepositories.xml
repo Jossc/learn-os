@@ -3,8 +3,28 @@
   <component name="RemoteRepositoriesConfiguration">
     <remote-repository>
       <option name="id" value="central" />
+      <option name="name" value="central" />
+      <option name="url" value="https://maven.aliyun.com/nexus/content/groups/public" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="central" />
       <option name="name" value="Central Repository" />
       <option name="url" value="https://repo.maven.apache.org/maven2" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="local-nexus" />
+      <option name="name" value="local-nexus" />
+      <option name="url" value="http://maven.int.ybm100.com/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="maven-snapshots" />
+      <option name="name" value="maven-snapshots" />
+      <option name="url" value="https://mvn.int.ybm100.com/repository/maven-snapshots/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="central" />
+      <option name="name" value="Central Repository" />
+      <option name="url" value="http://maven.aliyun.com/nexus/content/repositories/central/" />
     </remote-repository>
     <remote-repository>
       <option name="id" value="central" />
@@ -12,9 +32,39 @@
       <option name="url" value="https://repo1.maven.org/maven2" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="rdc-releases" />
+      <option name="name" value="rdc-releases" />
+      <option name="url" value="https://packages.aliyun.com/maven/repository/2176407-release-SgophY/" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="jboss.community" />
       <option name="name" value="JBoss Community repository" />
       <option name="url" value="https://repository.jboss.org/nexus/content/repositories/public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="rdc-snapshots" />
+      <option name="name" value="rdc-snapshots" />
+      <option name="url" value="https://packages.aliyun.com/maven/repository/2176407-snapshot-NMT51w/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="central" />
+      <option name="name" value="central" />
+      <option name="url" value="http://maven.aliyun.com/nexus/content/repositories/central/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="snapshots" />
+      <option name="name" value="snapshots" />
+      <option name="url" value="https://maven.aliyun.com/nexus/content/groups/public" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="mvn-snapshots" />
+      <option name="name" value="mvn-snapshots" />
+      <option name="url" value="http://mvn.int.ybm100.com/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="maven-ali" />
+      <option name="name" value="maven-ali" />
+      <option name="url" value="http://maven.aliyun.com/nexus/content/groups/public/" />
     </remote-repository>
   </component>
 </project>

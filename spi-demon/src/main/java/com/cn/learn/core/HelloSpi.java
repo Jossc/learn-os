@@ -19,5 +19,6 @@ public class HelloSpi {
        /* for (HelloService service : helloServices){
             System.out.println(service.sayHello("ahah"));
         }*/
+
     }
 }

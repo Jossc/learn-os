@@ -12,6 +12,7 @@
         <module name="learn-redis" />
         <module name="leetCode" />
         <module name="learn-jvm" />
+        <module name="learn-netty" />
         <module name="register-client" />
         <module name="learn-etcd" />
         <module name="leaderZk" />

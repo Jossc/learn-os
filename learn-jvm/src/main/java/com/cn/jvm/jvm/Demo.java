@@ -10,6 +10,12 @@ import java.util.concurrent.locks.LockSupport;
  */
 public class Demo {
     public static void main(String[] args) throws Exception {
-        LockSupport.park();
+        /*LockSupport.park();
+
+*/
+        int val = (int) 4294967297L;
+        System.out.println( val);
+        int val2 = (int)4294967294L;
+        System.out.println( val2);
     }
 }
