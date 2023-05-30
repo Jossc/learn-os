@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <comment>IK Analyzer 扩展配置</comment>
+
+    <entry key="ext_dict">ext.dic;</entry>
+
+    <entry key="remote_ext_dict">xx</entry>
+    <!--    <entry key="ext_stopwords">stopword.dic;org/wltea/analyzer/dic/main2012.dic;</entry>-->
+</properties>

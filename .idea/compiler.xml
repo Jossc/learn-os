@@ -3,7 +3,7 @@
   <component name="CompilerConfiguration">
     <annotationProcessing>
       <profile default="true" name="Default" enabled="true" />
-      <profile name="Maven default annotation processors profile" enabled="true">
+      <profile name="Maven default annotation processors profile" enabled="true" procOnly="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
@@ -17,6 +17,7 @@
         <module name="learn-etcd" />
         <module name="leaderZk" />
         <module name="learn-demo-dubbo" />
+        <module name="lagou-es-project" />
         <module name="dubbo-spi-api" />
         <module name="dubbo-spi-impl" />
         <module name="learn-agent" />
@@ -25,5 +26,11 @@
         <module name="learn-disruptor" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel target="11" />
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="lagou-es-project" options="-parameters" />
+    </option>
   </component>
 </project>
