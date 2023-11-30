@@ -16,6 +16,7 @@
         <module name="register-client" />
         <module name="learn-etcd" />
         <module name="leaderZk" />
+        <module name="nlp" />
         <module name="learn-demo-dubbo" />
         <module name="lagou-es-project" />
         <module name="dubbo-spi-api" />
