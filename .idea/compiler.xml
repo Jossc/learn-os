@@ -16,7 +16,6 @@
         <module name="register-client" />
         <module name="learn-etcd" />
         <module name="leaderZk" />
-        <module name="nlp" />
         <module name="learn-demo-dubbo" />
         <module name="lagou-es-project" />
         <module name="dubbo-spi-api" />
@@ -27,7 +26,9 @@
         <module name="learn-disruptor" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel target="11" />
+    <bytecodeTargetLevel target="11">
+      <module name="nlp" target="11" />
+    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">

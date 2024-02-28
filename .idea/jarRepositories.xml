@@ -32,6 +32,11 @@
       <option name="url" value="https://repo1.maven.org/maven2" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="central" />
+      <option name="name" value="Central Repository" />
+      <option name="url" value="http://central.maven.org/maven2" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="rdc-releases" />
       <option name="name" value="rdc-releases" />
       <option name="url" value="https://packages.aliyun.com/maven/repository/2176407-release-SgophY/" />
