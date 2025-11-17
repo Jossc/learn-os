@@ -1,0 +1,41 @@
+@startuml
+
+autonumber
+openApi ->cloudHosServer : 支付消息通知 twoClearOrderPayMqData
+
+cloudHosServer->cloudHosServer: 查询订单信息, 这里用bizOrderNo 去redis 里边换取了订单号
+alt 如果订单存在
+    cloudHosServer->cloudHosServer: 更新订单状态 为已支付 状态是2 \n com.lulutong.auth.constant.business.PayConstant.OrderStatus
+    cloudHosServer->cloudHosServer: getPatientRightsByRegId 查询权益信息 pro_register
+    alt : 如果是 极速视频
+            cloudHosServer->cloudHosServer: 放在redis 里边设置24小时过期,使用redis list 放在队列里边 实现 患者排队
+    else 如果是图文
+        cloudHosServer->cloudHosServer: 查询患者信息, \n 这里联表查询, dic_patient_user 和 pro_patient 根据 pro_patient 中的 患者id 查询
+        cloudHosServer->cloudHosServer: 查询医生信息  这个sql 看不懂 com.lulutong.basic.dao.DicDoctorDao#getDocInfoById
+        cloudHosServer->cloudHosServer: 向商城同步问诊信息 发送了个mq amq.direct、syn.mall.reg.key
+        cloudHosServer->cloudHosServer: 给患者发送短信通知
+    end
+    cloudHosServer->cloudHosServer :callBackUpdateReg 更新订单回调信息
+    cloudHosServer->cloudHosServer :callBackUpdateReg 先更新了pro_register 里边的状态,默认是待接诊，状态是3
+    cloudHosServer->cloudHosServer :callBackUpdateReg 查询患者手机号
+    cloudHosServer->cloudHosServer :callBackUpdateReg 组装企业微信消息
+
+    alt : cloudHosServer callBackUpdateReg 判断问诊类型 cloudHosServer VIDEO_CONSULTATION 中医视频 中医视频
+        cloudHosServer->cloudHosServer: callBackUpdateReg 返送短信sendCustom
+        cloudHosServer->cloudHosServer: callBackUpdateReg 发送 sendRabbitDelayMessage 延迟队列
+
+    alt else: callBackUpdateReg TARGETED_VIDEO、 REPORT_INTERPRETATION 定向视频、报告解读
+        cloudHosServer->cloudHosServer: callBackUpdateReg 从redis 里边获取用户绑定的医生id
+        cloudHosServer->cloudHosServer: callBackUpdateReg 根据docId 查询医生信息
+        cloudHosServer->cloudHosServer: callBackUpdateReg 返送短信sendCustom
+        cloudHosServer->cloudHosServer: callBackUpdateReg 如果是 定向视频、TARGETED_VIDEO \n 这里还会发一次短信、然后绑定一次医生、发起2次 阿里云语音服务医生信息 \n
+    end
+    cloudHosServer->cloudHosServer: 走默认逻辑 非上面的几种情况、给医生打电话、放在延期队列中
+else
+
+end
+cloudHosServer->cloudHosServer: sendAlBenefitsCenterEquity 调用订单更新权益 pay_order_apply
+cloudHosServer->cloudHosServer: 删除bizNo信息
+cloudHosServer->cloudHosServer: pay_order_apply 保存支付
+
+@enduml

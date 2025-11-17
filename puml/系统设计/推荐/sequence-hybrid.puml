@@ -1,0 +1,183 @@
+@startuml 混合推荐策略时序图
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title 推荐系统 - 混合推荐策略执行流程
+
+actor 用户 as user
+participant "HybridStrategy" as hybrid
+participant "UserBasedCF" as user_cf
+participant "ItemBasedCF" as item_cf
+participant "ContentBased" as content
+participant "Helper" as helper
+database "Database" as db
+
+user -> hybrid: recommend(request)
+activate hybrid
+
+note over hybrid
+    混合策略开始
+    目标：融合3个子策略
+end note
+
+== 并行执行子策略 ==
+
+par 执行UserBasedCF
+    hybrid -> user_cf: isApplicable(request)
+    activate user_cf
+    user_cf --> hybrid: return true
+
+    hybrid -> user_cf: recommend(request)
+    user_cf -> db: 查询用户相似度
+    activate db
+    db --> user_cf: 返回相似用户
+    deactivate db
+
+    user_cf -> user_cf: 计算推荐
+    user_cf --> hybrid: 返回结果1
+    deactivate user_cf
+    note right
+        UserBasedCF结果：
+        [药品A: 0.85,
+         药品B: 0.78,
+         药品C: 0.72]
+    end note
+
+else 执行ItemBasedCF
+    hybrid -> item_cf: isApplicable(request)
+    activate item_cf
+    item_cf --> hybrid: return true
+
+    hybrid -> item_cf: recommend(request)
+    item_cf -> db: 查询药品相似度
+    activate db
+    db --> item_cf: 返回相似药品
+    deactivate db
+
+    item_cf -> item_cf: 计算推荐
+    item_cf --> hybrid: 返回结果2
+    deactivate item_cf
+    note right
+        ItemBasedCF结果：
+        [药品B: 0.92,
+         药品D: 0.88,
+         药品E: 0.75]
+    end note
+
+else 执行ContentBased
+    hybrid -> content: isApplicable(request)
+    activate content
+    content --> hybrid: return true
+
+    hybrid -> content: recommend(request)
+    content -> db: 查询药品特征
+    activate db
+    db --> content: 返回药品信息
+    deactivate db
+
+    content -> content: 计算内容相似度
+    content --> hybrid: 返回结果3
+    deactivate content
+    note right
+        ContentBased结果：
+        [药品A: 0.80,
+         药品F: 0.76,
+         药品G: 0.68]
+    end note
+end
+
+== 结果聚合 ==
+
+hybrid -> hybrid: 聚合所有结果
+note right
+    aggregatedScores:
+    - 药品A: 0.85 + 0.80 = 1.65 (出现2次)
+    - 药品B: 0.78 + 0.92 = 1.70 (出现2次)
+    - 药品C: 0.72 (出现1次)
+    - 药品D: 0.88 (出现1次)
+    - 药品E: 0.75 (出现1次)
+    - 药品F: 0.76 (出现1次)
+    - 药品G: 0.68 (出现1次)
+end note
+
+hybrid -> hybrid: 计算综合得分
+note right
+    综合得分 = 平均分 × log(出现次数 + 1)
+
+    药品A: (1.65/2) × log(3) = 0.825 × 1.10 = 0.908
+    药品B: (1.70/2) × log(3) = 0.850 × 1.10 = 0.935 ⭐
+    药品C: (0.72/1) × log(2) = 0.720 × 0.69 = 0.497
+    药品D: (0.88/1) × log(2) = 0.880 × 0.69 = 0.607
+    药品E: (0.75/1) × log(2) = 0.750 × 0.69 = 0.518
+    药品F: (0.76/1) × log(2) = 0.760 × 0.69 = 0.524
+    药品G: (0.68/1) × log(2) = 0.680 × 0.69 = 0.469
+end note
+
+hybrid -> hybrid: 排序筛选Top-N
+note right
+    排序后：
+    1. 药品B: 0.935
+    2. 药品A: 0.908
+    3. 药品D: 0.607
+    4. 药品F: 0.524
+    5. 药品E: 0.518
+    ...
+
+    取Top-10返回
+end note
+
+== 构建响应 ==
+
+hybrid -> helper: buildRecommendationResponse()
+activate helper
+
+helper -> db: 批量查询药品详细信息
+activate db
+db --> helper: 返回药品信息
+deactivate db
+
+helper -> helper: 填充药品详情
+note right
+    补充信息：
+    - 药品名称
+    - 价格
+    - 规格
+    - 厂家
+    - 图片URL
+end note
+
+helper -> helper: 生成推荐理由
+note right
+    根据来源生成理由：
+    - 出现2次: "综合多个维度推荐"
+    - 仅UserCF: "相似用户也喜欢"
+    - 仅ItemCF: "功效相似的药品"
+    - 仅Content: "成分相似推荐"
+end note
+
+helper --> hybrid: 返回完整响应
+deactivate helper
+
+hybrid --> user: 返回推荐结果
+deactivate hybrid
+
+note over user
+    最终结果：
+    {
+      "algorithm": "HYBRID",
+      "totalCount": 10,
+      "recommendations": [
+        {
+          "medicineId": "B",
+          "medicineName": "感冒灵",
+          "similarityScore": 0.935,
+          "reason": "综合多个维度推荐"
+        },
+        ...
+      ]
+    }
+end note
+
+@enduml
+

@@ -1,0 +1,87 @@
+graph TB
+    subgraph 客户端层
+        A[Web前端]
+        B[移动端APP]
+        C[小程序]
+    end
+
+    subgraph 接口层
+        D[RecommendationController<br/>推荐接口]
+    end
+
+    subgraph 推荐服务层
+        E[RecommendationStrategyFactory<br/>策略工厂]
+    end
+
+    subgraph 推荐策略层
+        F[RecommendationStrategy<br/>策略接口]
+        G1[UserBasedCF<br/>用户协同过滤<br/>优先级:10]
+        G2[ItemBasedCF<br/>物品协同过滤<br/>优先级:20]
+        G3[ContentBased<br/>内容推荐<br/>优先级:30]
+        G4[HybridStrategy<br/>混合推荐<br/>优先级:5]
+        G5[HotStrategy<br/>热门推荐<br/>优先级:90]
+        G6[DefaultStrategy<br/>默认推荐<br/>优先级:100]
+    end
+
+    subgraph 辅助工具层
+        H[RecommendationHelper<br/>推荐辅助工具]
+    end
+
+    subgraph 数据访问层
+        I1[UserSimilarityMapper]
+        I2[MedicineSimilarityMapper]
+        I3[UserBehaviorStatsMapper]
+        I4[MedicineInfoMapper]
+    end
+
+    subgraph 缓存层
+        J[(Redis缓存)]
+    end
+
+    subgraph 数据库层
+        K[(MySQL数据库)]
+    end
+
+    A --> D
+    B --> D
+    C --> D
+
+    D --> E
+    E --> F
+
+    F -.实现.-> G1
+    F -.实现.-> G2
+    F -.实现.-> G3
+    F -.实现.-> G4
+    F -.实现.-> G5
+    F -.实现.-> G6
+
+    G4 -.组合.-> G1
+    G4 -.组合.-> G2
+    G4 -.组合.-> G3
+
+    G1 --> H
+    G2 --> H
+    G3 --> H
+    G4 --> H
+
+    G1 --> I1
+    G1 --> I3
+    G2 --> I2
+    G3 --> I4
+    G5 --> I3
+
+    I1 --> J
+    I2 --> J
+
+    I1 --> K
+    I2 --> K
+    I3 --> K
+    I4 --> K
+
+    style E fill:#FFF3E0
+    style F fill:#E8F5E9
+    style G4 fill:#FFEBEE
+    style J fill:#F3E5F5
+    style K fill:#FCE4EC
+

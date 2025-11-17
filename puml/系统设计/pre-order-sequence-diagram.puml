@@ -1,0 +1,106 @@
+@startuml 立即购买预下单接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/order/pre/order 立即购买预下单接口执行时序图
+
+actor "前端用户" as Client
+participant "OrderController" as Controller
+participant "FrontOrderService" as OrderService
+participant "UserService" as UserService
+participant "ProductService" as ProductService
+participant "ProductAttrValueService" as AttrService
+participant "UserAddressService" as AddressService
+participant "CouponService" as CouponService
+participant "MerchantService" as MerchantService
+participant "OrderNoResponse" as Response
+
+box "价格计算模块" #LightGreen
+    participant "PriceCalculator" as Calculator
+end box
+
+Client -> Controller: POST /api/front/order/pre/order\n{productId, attrValueId, cartNum, type}
+activate Controller
+
+Controller -> OrderService: preOrder_V1_5(PreOrderRequest)
+activate OrderService
+
+note over OrderService: 开始立即购买预下单流程
+
+OrderService -> UserService: 获取当前用户信息
+activate UserService
+UserService --> OrderService: 返回用户详情
+deactivate UserService
+
+OrderService -> ProductService: 验证商品信息
+activate ProductService
+ProductService --> OrderService: 返回商品详情
+deactivate ProductService
+
+OrderService -> AttrService: 获取SKU规格信息
+activate AttrService
+AttrService --> OrderService: 返回SKU详情和价格
+deactivate AttrService
+
+OrderService -> OrderService: 验证商品状态和库存
+note over OrderService: 检查商品是否上架\n验证库存是否充足\n确认商品可购买
+
+alt 商品验证失败
+    OrderService --> Controller: 抛出商品状态异常
+end
+
+OrderService -> AddressService: 获取用户收货地址
+activate AddressService
+AddressService --> OrderService: 返回地址列表
+deactivate AddressService
+
+OrderService -> MerchantService: 获取商家信息
+activate MerchantService
+MerchantService --> OrderService: 返回商家详情
+deactivate MerchantService
+
+OrderService -> CouponService: 获取可用优惠券
+activate CouponService
+CouponService --> OrderService: 返回可用优惠券列表
+deactivate CouponService
+
+OrderService -> Calculator: 计算订单价格
+activate Calculator
+note over Calculator: 计算商品总价\n计算运费\n计算优惠金额\n计算最终支付金额
+Calculator --> OrderService: 返回价格计算结果
+deactivate Calculator
+
+OrderService -> OrderService: 生成预订单号
+note over OrderService: 创建唯一预订单标识\n缓存预订单信息
+
+OrderService -> OrderService: 保存预订单信息
+note over OrderService: 将订单信息临时保存\n设置有效期
+
+OrderService -> Response: 组装预订单响应
+activate Response
+
+note over Response: OrderNoResponse包含:\n- preOrderNo: 预订单号\n- orderInfo: 订单商品信息\n- addressList: 收货地址\n- coupons: 可用优惠券\n- priceInfo: 价格详情\n- merchantInfo: 商家信息
+
+OrderService --> Controller: 返回OrderNoResponse
+deactivate Response
+deactivate OrderService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回预订单信息
+deactivate Controller
+
+note over Client
+返回的预订单信息包含:
+- preOrderNo: 预订单号（用于后续创建订单）
+- orderInfo: 商品信息和数量
+- addressList: 可选收货地址
+- usableCoupons: 可用优惠券
+- priceGroup: 价格明细
+- totalPrice: 商品总价
+- payPrice: 预计支付金额
+end note
+
+@enduml

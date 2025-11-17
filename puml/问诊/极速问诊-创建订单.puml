@@ -1,0 +1,37 @@
+@startuml
+
+autonumber
+user ->cloudHosServer  :createOrder 创建问诊订单 paymentBusiness createOrder
+cloudHosServer -> cloudHosServer : getPatientBypatientId 根据患者 id 查询用户id
+cloudHosServer -> cloudHosServer : getUserInfoByUserId 根据userId 查询问诊用户信息
+cloudHosServer -> cloudHosServer : savePatientRecords 保存病例信息 table patient_records
+cloudHosServer -> cloudHosServer : saveRegister 添加挂号信息
+alt 挂号信息添加校验
+    alt  TARGETED_VIDEO（定向视频） RegisterSupportService#saveRegister
+        alt 如果有医生id 查询医生排班
+                cloudHosServer-> cloudHosServer : getDateVisitRealCount 查询医生排班
+                cloudHosServer-> cloudHosServer : getRegisterByAppointDate 获取当前排班数量 pro_register
+                alt registerCount 问诊数量 >= 指定医生等待数量
+                     cloudHosServer -> user: 当前时间段已预约满，请选择其他时间段
+                end
+        else 这里没有指定医生id,根据当前开始时间和结束时间 查询医生符合条件的医生id id
+            cloudHosServer ->cloudHosServer : 绑定用户和医生的关系，根据 patient_user_id先删除\n 在插入 dic_doc_patient_user_link
+        end
+    else  VIDEO_CONSULTATION || REPORT_INTERPRETATION
+        cloudHosServer-> user: 丢出异常 当前时段已无号源,请重新选择
+    end
+    cloudHosServer->cloudHosServer: 保存挂号信息 \n 这里  LX.generateOrderNumber() 生成了订单号\n 返回registerInfoVO
+end
+cloudHosServer ->cloudHosServer: 根据问诊类型 查询医生 getDoctorByVisitTypeCode \n 先查询 doc_business_switch  在查询 dic_doctor \n 返回 dicDoctors 医生合集
+
+alt 如果 的订单金额大于0
+    alt  如果ONLINE_DIAGNOSIS 在线复诊调养 TARGETED_VIDEO在线视频调理
+        cloudHosServer->cloudHosServer :发送mq  队列: amq.direct \n 这里有个疑问 \n 下边的逻辑有查询二清支付回文 <b>这里会出现没支付完成的情况</b>
+        cloudHosServer->cloudHosServer : savePlayInfo 会设置成false
+else 患者免费下单流程
+    cloudHosServer->cloudHosServer : 给用户和医生发提示
+end
+cloudHosServer->cloudHosServer: 创建订单 这里在 pay_order 里边插入了一条记录  pro_receive
+cloudHosServer->cloudHosServer: 插入 pro_receive 接诊记录 这里调用一个三方接口
+cloudHosServer -> user :创建完成
+@enduml

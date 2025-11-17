@@ -1,0 +1,156 @@
+@startuml 支付系统交互时序图
+
+title 支付系统 - 完整交互流程（微信支付渠道）
+
+actor 用户 as User
+participant 前端支付选择页 as Frontend
+participant API网关 as Gateway
+participant 支付核心服务 as PaymentCore
+participant 渠道路由服务 as ChannelRouter
+participant 爱连支付渠道服务 as AilianChannel
+participant 微信支付接口 as WeChatPay
+participant 爱连支付回调接口 as AilianCallback
+participant 回调处理服务 as CallbackService
+participant 消息队列 as MQ
+participant 业务系统订单服务 as OrderService
+participant 前端支付状态页 as StatusPage
+
+== 1. 支付发起流程 ==
+
+User -> Frontend: 选择商品/服务并发起支付
+Frontend -> User: 显示支付选择页面
+User -> Frontend: 选择微信支付方式
+Frontend -> Gateway: POST /api/payment/create
+note right of Frontend: 请求参数：\n- 订单信息\n- 支付金额\n- 回调地址等
+
+Gateway -> Gateway: 校验请求签名
+note right of Gateway: 验证API签名\n检查请求合法性\n限流控制
+
+Gateway -> PaymentCore: createPaymentOrder(orderInfo)
+PaymentCore -> PaymentCore: 生成支付订单
+note right of PaymentCore: 1. 验证订单信息\n2. 生成支付流水号\n3. 订单状态：待支付
+
+PaymentCore -> ChannelRouter: selectPaymentChannel(paymentMethod, amount)
+note right of ChannelRouter: 路由规则匹配：\n1. 支付方式(微信)\n2. 金额范围\n3. 渠道可用性\n4. 成本优化
+
+ChannelRouter -> PaymentCore: 返回爱连支付渠道
+PaymentCore -> AilianChannel: createPayment(orderInfo, channelConfig)
+
+AilianChannel -> AilianChannel: 参数转换适配
+note right of AilianChannel: 1. 标准参数转爱连格式\n2. 签名生成\n3. 回调地址配置
+
+AilianChannel -> WeChatPay: 调用微信支付API
+note right of AilianChannel: 请求微信统一下单接口\nAPI: /pay/unifiedorder
+
+WeChatPay -> AilianChannel: 返回预支付交易会话标识
+AilianChannel -> PaymentCore: 返回支付参数
+PaymentCore -> Gateway: 返回支付信息
+Gateway -> Frontend: 返回支付参数
+Frontend -> User: 展示微信支付二维码/调起微信支付
+
+== 2. 用户支付过程 ==
+
+User -> WeChatPay: 扫码/密码支付
+note right of User: 用户在微信端\n完成支付操作
+
+WeChatPay -> WeChatPay: 处理支付请求
+note right of WeChatPay: 1. 验证用户身份\n2. 检查账户余额\n3. 执行扣款操作
+
+== 3. 支付结果回调处理 ==
+
+WeChatPay -> AilianCallback: 支付结果异步通知
+note right of WeChatPay: POST /callback/wechat\n包含支付状态、交易号等
+
+AilianCallback -> Gateway: 转发回调请求
+Gateway -> Gateway: 验证回调签名
+note right of Gateway: 1. 验证请求来源\n2. 校验签名有效性\n3. 防重放攻击
+
+Gateway -> CallbackService: processPaymentCallback(callbackData)
+CallbackService -> CallbackService: 解析回调数据
+note right of CallbackService: 1. 解析支付结果\n2. 验证交易信息\n3. 幂等性检查
+
+CallbackService -> PaymentCore: updatePaymentStatus(paymentId, status)
+PaymentCore -> PaymentCore: 更新订单状态
+note right of PaymentCore: 1. 校验状态变更合法性\n2. 更新支付状态\n3. 记录交易流水
+
+alt 支付成功
+    PaymentCore -> MQ: 发送支付成功消息
+    note right of PaymentCore: 消息内容：\n- 订单号\n- 支付金额\n- 用户ID\n- 时间戳
+
+    MQ -> OrderService: 消费支付成功消息
+    OrderService -> OrderService: 处理业务逻辑
+    note right of OrderService: 1. 更新订单状态\n2. 库存扣减\n3. 发货处理\n4. 积分奖励等
+
+    OrderService -> MQ: 发送订单处理完成消息
+    MQ -> PaymentCore: 业务处理完成通知
+    PaymentCore -> PaymentCore: 标记支付完成
+
+else 支付失败
+    PaymentCore -> PaymentCore: 标记支付失败
+    PaymentCore -> MQ: 发送支付失败消息
+    MQ -> OrderService: 处理支付失败
+    OrderService -> OrderService: 恢复库存等
+end
+
+CallbackService -> AilianCallback: 返回处理成功
+AilianCallback -> WeChatPay: 确认回调接收成功
+
+== 4. 前端状态更新 ==
+
+par 轮询方式
+    Frontend -> Gateway: GET /api/payment/status/{paymentId}
+    note right of Frontend: 前端定时轮询\n(每2-3秒查询一次)
+
+    Gateway -> PaymentCore: getPaymentStatus(paymentId)
+    PaymentCore -> Gateway: 返回支付状态
+    Gateway -> Frontend: 返回状态信息
+
+    alt 支付成功
+        Frontend -> StatusPage: 跳转支付成功页
+        StatusPage -> User: 显示支付成功信息
+    else 支付失败
+        Frontend -> StatusPage: 跳转支付失败页
+        StatusPage -> User: 显示失败原因
+    else 支付中
+        Frontend -> Frontend: 继续轮询
+    end
+
+else WebSocket推送方式
+    PaymentCore -> StatusPage: WebSocket推送状态变更
+    note right of PaymentCore: 实时推送支付状态\n减少服务器轮询压力
+
+    StatusPage -> User: 实时显示支付结果
+end
+
+== 5. 异常处理流程 ==
+
+alt 回调超时处理
+    note over CallbackService: 如果15分钟内未收到回调
+
+    CallbackService -> PaymentCore: 主动查询支付状态
+    PaymentCore -> AilianChannel: queryPaymentStatus(paymentId)
+    AilianChannel -> WeChatPay: 查询支付结果API
+    WeChatPay -> AilianChannel: 返回真实支付状态
+    AilianChannel -> PaymentCore: 返回查询结果
+    PaymentCore -> PaymentCore: 根据查询结果更新状态
+end
+
+alt 重复回调处理
+    note over CallbackService: 幂等性保证
+
+    CallbackService -> PaymentCore: 检查订单当前状态
+    PaymentCore -> CallbackService: 返回已处理状态
+    CallbackService -> AilianCallback: 直接返回成功
+    note right of CallbackService: 避免重复处理\n保证数据一致性
+end
+
+== 6. 监控与日志 ==
+
+note over Gateway, PaymentCore: 全链路监控
+Gateway -> Gateway: 记录请求日志
+PaymentCore -> PaymentCore: 记录业务日志
+CallbackService -> CallbackService: 记录回调日志
+
+note over PaymentCore: 关键指标监控\n- 支付成功率\n- 回调延迟\n- 异常订单数\n- 渠道性能
+
+@enduml

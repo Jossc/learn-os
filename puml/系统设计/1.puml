@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant 商城APP
+    participant 网关
+    participant Nacos
+    participant 容错中心(Resilience4j)
+    participant oen-user服务
+    participant 权益服务
+    participant IM服务
+    participant Redis缓存
+
+    商城APP->>网关: GET /api/v1/user-center?userId=123
+    网关->>网关: 前置过滤器：认证鉴权通过
+    网关->>Nacos: 拉取服务实例列表（oen-user/权益/IM）
+    Nacos-->>网关: 返回可用实例：oen-user[10.0.0.1:8081]、权益[10.0.0.2:8082]、IM[10.0.0.3:8083]
+    网关->>容错中心(Resilience4j): 初始化策略（超时1s/1.5s/1s，熔断阈值50%）
+    容错中心(Resilience4j)-->>网关: 策略加载完成
+
+    par 多服务并行调用
+        网关->>oen-user服务: GET /user/info?userId=123（超时1s）
+        oen-user服务-->>网关: 返回用户数据{name:"张三",...}
+    and
+        网关->>权益服务: GET /benefit/available?userId=123（超时1.5s）
+        权益服务-->>网关: 返回权益数据[{couponId:1,...}]
+    and
+        网关->>IM服务: GET /im/unread?userId=123（超时1s）
+        IM服务-->>网关: 返回未读消息数5
+    end
+
+    网关->>网关: 聚合数据：用户+权益+IM
+    网关-->>商城APP: 200 OK 聚合响应{user:{...}, benefit:[...], unread:5}

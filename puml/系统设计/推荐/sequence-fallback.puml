@@ -1,0 +1,126 @@
+@startuml 策略降级流程时序图
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title 推荐系统 - 策略降级处理流程
+
+actor 用户 as user
+participant "StrategyFactory" as factory
+participant "Strategy1\n(UserBasedCF)" as strategy1
+participant "Strategy2\n(ItemBasedCF)" as strategy2
+participant "Strategy3\n(Hot)" as strategy3
+database "Database" as db
+
+user -> factory: 请求推荐
+activate factory
+
+== 第一次尝试 ==
+
+factory -> factory: 按优先级选择Strategy1
+note right: UserBasedCF (优先级: 10)
+
+factory -> strategy1: isApplicable(request)
+activate strategy1
+strategy1 --> factory: return true
+deactivate strategy1
+
+factory -> strategy1: recommend(request)
+activate strategy1
+
+strategy1 -> db: 查询用户相似度
+activate db
+db --> strategy1: 查询失败 ❌
+deactivate db
+
+strategy1 -> strategy1: 抛出异常
+strategy1 -->x factory: Exception: 数据库查询失败
+deactivate strategy1
+
+factory -> factory: 捕获异常
+note right
+    异常处理：
+    log.warn("策略 {} 执行失败",
+             strategyName)
+end note
+
+== 降级处理 - 第二次尝试 ==
+
+factory -> factory: 检查是否启用降级
+note right: enableFallback = true ✓
+
+factory -> factory: 选择下一优先级策略
+note right: ItemBasedCF (优先级: 20)
+
+factory -> strategy2: isApplicable(request)
+activate strategy2
+strategy2 --> factory: return true
+deactivate strategy2
+
+factory -> strategy2: recommend(request)
+activate strategy2
+
+strategy2 -> db: 查询药品相似度
+activate db
+db --> strategy2: 返回数据 ✓
+deactivate db
+
+strategy2 -> strategy2: 执行推荐算法
+strategy2 --> factory: 返回推荐结果
+deactivate strategy2
+note left: 但结果列表为空 []
+
+factory -> factory: 检查结果
+note right
+    recommendations.isEmpty() = true
+    继续降级
+end note
+
+== 降级处理 - 第三次尝试 ==
+
+factory -> factory: 继续选择下一策略
+note right: Hot (优先级: 90)\n热门推荐总是可用
+
+factory -> strategy3: isApplicable(request)
+activate strategy3
+strategy3 --> factory: return true
+deactivate strategy3
+
+factory -> strategy3: recommend(request)
+activate strategy3
+
+strategy3 -> db: 查询热门药品统计
+activate db
+db --> strategy3: 返回热门榜单
+deactivate db
+
+strategy3 -> strategy3: 按热度排序
+strategy3 --> factory: 返回推荐结果 ✓
+deactivate strategy3
+note left
+    成功返回：
+    - algorithm: "HOT"
+    - totalCount: 10
+    - recommendations: [...]
+end note
+
+factory -> factory: 检查结果
+note right: 结果不为空，降级成功 ✓
+
+factory --> user: 返回推荐响应
+deactivate factory
+
+note over user
+    虽然降级了，但用户
+    仍然得到了推荐结果
+    (热门药品推荐)
+end note
+
+note over factory
+    降级日志记录：
+    【策略降级】UserBasedCF失败 → ItemBasedCF空结果 → Hot成功
+    总耗时: 350ms
+end note
+
+@enduml
+

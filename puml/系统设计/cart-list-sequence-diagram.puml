@@ -1,0 +1,72 @@
+@startuml 购物车列表接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/cart/list 购物车列表接口执行时序图
+
+actor "前端用户" as Client
+participant "CartController" as Controller
+participant "CartService" as CartService
+participant "CartPriceService" as CartPriceService
+participant "UserService" as UserService
+participant "ProductService" as ProductService
+participant "MerchantService" as MerchantService
+
+Client -> Controller: GET /api/front/cart/list?isValid=true
+activate Controller
+
+Controller -> CartService: getList(isValid)
+activate CartService
+
+note over CartService: 获取当前用户的购物车数据
+
+CartService -> UserService: 获取当前用户ID
+activate UserService
+UserService --> CartService: 返回用户ID
+deactivate UserService
+
+CartService -> CartService: 查询用户购物车数据
+note over CartService: 根据isValid参数\n筛选有效/无效商品
+
+CartService --> Controller: 返回购物车基础数据列表
+deactivate CartService
+
+Controller -> CartPriceService: getList(cartList, isValid)
+activate CartPriceService
+
+note over CartPriceService: 处理购物车数据\n组装商品信息和价格
+
+CartPriceService -> ProductService: 批量获取商品信息
+activate ProductService
+ProductService --> CartPriceService: 返回商品详情
+deactivate ProductService
+
+CartPriceService -> MerchantService: 获取商家信息
+activate MerchantService
+MerchantService --> CartPriceService: 返回商家详情
+deactivate MerchantService
+
+CartPriceService -> CartPriceService: 组装购物车商品数据
+note over CartPriceService: 按商家分组\n计算价格信息\n处理商品状态
+
+CartPriceService --> Controller: 返回CartMerchantResponse列表
+deactivate CartPriceService
+
+Controller -> Controller: CommonResult.success(result)
+Controller --> Client: 返回购物车列表数据
+deactivate Controller
+
+note over Client
+返回的购物车数据包含:
+- 按商家分组的购物车商品
+- 商品基本信息（名称、图片、价格等）
+- 商品规格信息
+- 商品有效性状态
+- 购买数量
+- 商家信息
+end note
+
+@enduml

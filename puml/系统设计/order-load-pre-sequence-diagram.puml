@@ -1,0 +1,83 @@
+@startuml 提交订单页面接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/order/load/pre 提交订单页面接口执行时序图
+
+actor "前端用户" as Client
+participant "OrderController" as Controller
+participant "FrontOrderService" as OrderService
+participant "UserService" as UserService
+participant "UserAddressService" as AddressService
+participant "CouponService" as CouponService
+participant "ProductService" as ProductService
+participant "MerchantService" as MerchantService
+participant "PreOrderResponse" as Response
+
+Client -> Controller: GET /api/front/order/load/pre/{preOrderNo}
+activate Controller
+
+Controller -> OrderService: loadPreOrder(preOrderNo)
+activate OrderService
+
+note over OrderService: 根据预订单号加载订单信息
+
+OrderService -> OrderService: 查询预订单数据
+note over OrderService: 验证预订单有效性\n获取预订单详情
+
+OrderService -> UserService: 获取当前用户信息
+activate UserService
+UserService --> OrderService: 返回用户信息
+deactivate UserService
+
+OrderService -> AddressService: 获取用户收货地址列表
+activate AddressService
+AddressService --> OrderService: 返回地址列表
+deactivate AddressService
+
+OrderService -> ProductService: 获取订单商品详情
+activate ProductService
+ProductService --> OrderService: 返回商品信息列表
+deactivate ProductService
+
+OrderService -> MerchantService: 获取商家信息
+activate MerchantService
+MerchantService --> OrderService: 返回商家详情
+deactivate MerchantService
+
+OrderService -> CouponService: 获取可用优惠券
+activate CouponService
+CouponService --> OrderService: 返回可用优惠券列表
+deactivate CouponService
+
+OrderService -> OrderService: 计算订单价格信息
+note over OrderService: 计算商品总价\n计算运费\n计算优惠金额\n计算最终支付金额
+
+OrderService -> Response: 组装响应数据
+activate Response
+
+note over Response: PreOrderResponse包含:\n- 订单商品信息\n- 收货地址列表\n- 可用优惠券\n- 价格计算结果\n- 商家信息\n- 用户余额
+
+OrderService --> Controller: 返回PreOrderResponse
+deactivate Response
+deactivate OrderService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回预订单页面数据
+deactivate Controller
+
+note over Client
+返回的订单页面数据包含:
+- addressList: 收货地址列表
+- orderInfos: 按商家分组的订单商品
+- priceGroup: 价格明细
+- usableCoupons: 可用优惠券
+- userInfo: 用户信息
+- totalPrice: 总价
+- payPrice: 支付价格
+end note
+
+@enduml

@@ -1,0 +1,86 @@
+@startuml skywalking-business-plugin-sequence
+!theme plain
+
+participant "SkyWalking Agent" as Agent
+participant "BusinessPluginDefine" as Plugin
+participant "BusinessBootService" as Boot
+participant "SpringBeanInterceptorAdvisor" as Advisor
+participant "BusinessMetricRegistry" as Registry
+participant "ConsultMetricsInterceptor" as Interceptor
+participant "Spring ApplicationContext" as Spring
+participant "Business Service" as Service
+
+== 插件初始化阶段 ==
+Agent -> Plugin: loadPlugin()
+activate Plugin
+Plugin -> Boot: createBootService()
+activate Boot
+Boot -> Registry: initialize()
+activate Registry
+Registry -> Registry: registerBuiltinMetrics()
+Boot -> Advisor: createSpringAdvisor()
+activate Advisor
+Advisor -> Interceptor: createInterceptors()
+activate Interceptor
+return interceptor instances
+return advisor configured
+return registry initialized
+return boot service ready
+return plugin loaded
+
+== Spring容器启动阶段 ==
+Spring -> Advisor: configureSpringAOP()
+activate Advisor
+Advisor -> Spring: registerBeanPostProcessor()
+Advisor -> Advisor: scanForBusinessBeans()
+loop for each business bean
+    Advisor -> Spring: createProxyBean()
+    Spring -> Advisor: proxy created
+end
+return AOP configured
+
+== 业务方法调用阶段 ==
+Service -> Interceptor: invoke(method, args)
+activate Interceptor
+Interceptor -> Registry: getCounter("consult.started")
+activate Registry
+return counter
+Interceptor -> Interceptor: recordMetricStart()
+Interceptor -> Service: proceed()
+activate Service
+alt 正常执行
+    Service -> Interceptor: return result
+    Interceptor -> Registry: increment("consult.completed")
+    Registry -> Registry: updateMetric()
+    Interceptor -> Registry: recordDuration()
+else 异常情况
+    Service -> Interceptor: throw exception
+    Interceptor -> Registry: increment("consult.failed")
+    Registry -> Registry: updateErrorMetric()
+end
+deactivate Service
+return result/exception
+deactivate Registry
+deactivate Interceptor
+
+== 指标上报阶段 ==
+loop 定期上报
+    Registry -> Agent: reportMetrics()
+    Agent -> "SkyWalking OAP": sendMetrics()
+end
+
+== 插件关闭阶段 ==
+Agent -> Boot: shutdown()
+activate Boot
+Boot -> Advisor: cleanup()
+activate Advisor
+Advisor -> Spring: removeProxies()
+return cleaned
+Boot -> Registry: shutdown()
+activate Registry
+Registry -> Registry: flushMetrics()
+return shutdown complete
+return plugin shutdown
+deactivate Boot
+
+@enduml

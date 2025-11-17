@@ -6,3 +6,4 @@ dontinline,*.*_thrpt_jmhStub
 dontinline,com/cn/jvm/lock/LockRoach.test
 inline,com/cn/jvm/jmh/BenchmarkTest.div
 inline,com/cn/jvm/jmh/BenchmarkTest.shift
+inline,com/cn/jvm/jmh/JmhTest.testForEach

@@ -1,0 +1,9 @@
+@startuml
+
+autonumber
+doc->cloudHosServer: 取消问诊
+cloudHoscloudHosServerServer->cloudHosServer: 查询挂号信息、 pro_register 根据reg id 查询
+
+
+
+@enduml

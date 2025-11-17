@@ -1,0 +1,49 @@
+@startuml
+newpage '增量同步库存逻辑'
+'https://plantuml.com/sequence-diagram
+
+autonumber
+神农 -> OFC : 增量同步库存逻辑
+note left
+    传入参数 :
+    - orgCode
+    - ownerCode
+    - 标准库ID
+    - 增量库存数量
+
+    - 310 和311 mq 神农回归测试
+end note
+activate OFC
+alt 检查成功
+    OFC -> OFC : 统计单位时间内更新频率是否超过限制
+    alt 更新频率未超过限制
+        note right : 这里需要加锁控制并发场景\n如果提单和库存更新一起过来\n需要先提单再更新库存
+    /'    rectangle "并发控制" as lock {
+             note right
+                  查询库存信息涉及表信息:
+                     - o2o_agg_b2c_merchandise
+                     - o2o_agg_b2c_merchandise_sku
+                     - 取消共享库存 MQ逻辑
+        }
+'/
+        OFC -> OFC : 校验品信息是否存在
+                    note right
+                        查询库存信息涉及表信息:
+                        - o2o_agg_b2c_merchandise
+                        - o2o_agg_b2c_merchandise_sku
+                        - 取消共享库存 MQ逻辑
+                    end note
+                    alt 品信息存在
+                        OFC -> OFC : 更新品库存
+                        OFC -> 神农 : 库存响应成功
+                    else 品信息不存在
+                        OFC -> 神农 : 品信息不存在错误
+                    end
+    else 更新频率超过限制
+        OFC -> 神农 : 库存更新频率过高
+    end
+else 检查失败
+    OFC -> 神农 : 初始检查失败
+end
+deactivate OFC
+@enduml

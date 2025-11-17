@@ -1,0 +1,524 @@
+[
+  {
+    "id": "business-metrics-dashboard",
+    "configuration": {
+      "children": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 3,
+          "i": "title-business",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "📈 业务核心指标监控 - Business Core Metrics"
+            }
+          },
+          "graph": {
+            "type": "Text"
+          }
+        },
+        {
+          "x": 0,
+          "y": 3,
+          "w": 6,
+          "h": 10,
+          "i": "total-orders",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "订单总量"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_total_orders"
+          ],
+          "metricConfig": [
+            {
+              "unit": "orders"
+            }
+          ]
+        },
+        {
+          "x": 6,
+          "y": 3,
+          "w": 6,
+          "h": 10,
+          "i": "order-success-rate",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "订单成功率"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_order_success_rate"
+          ],
+          "metricConfig": [
+            {
+              "calculation": "percentage",
+              "unit": "%"
+            }
+          ]
+        },
+        {
+          "x": 12,
+          "y": 3,
+          "w": 6,
+          "h": 10,
+          "i": "active-users",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "活跃用户数"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_active_users"
+          ],
+          "metricConfig": [
+            {
+              "unit": "users"
+            }
+          ]
+        },
+        {
+          "x": 18,
+          "y": 3,
+          "w": 6,
+          "h": 10,
+          "i": "total-revenue",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "总收入金额"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_total_revenue"
+          ],
+          "metricConfig": [
+            {
+              "unit": "¥"
+            }
+          ]
+        },
+        {
+          "x": 0,
+          "y": 13,
+          "w": 24,
+          "h": 3,
+          "i": "title-user-metrics",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "👥 用户行为指标 - User Behavior Metrics"
+            }
+          },
+          "graph": {
+            "type": "Text"
+          }
+        },
+        {
+          "x": 0,
+          "y": 16,
+          "w": 8,
+          "h": 10,
+          "i": "new-users",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "新注册用户数"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_new_users"
+          ],
+          "metricConfig": [
+            {
+              "unit": "users"
+            }
+          ]
+        },
+        {
+          "x": 8,
+          "y": 16,
+          "w": 8,
+          "h": 10,
+          "i": "user-logins",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "用户登录次数"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_user_logins"
+          ],
+          "metricConfig": [
+            {
+              "unit": "logins"
+            }
+          ]
+        },
+        {
+          "x": 16,
+          "y": 16,
+          "w": 8,
+          "h": 10,
+          "i": "user-retention",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "用户留存率"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_user_retention"
+          ],
+          "metricConfig": [
+            {
+              "calculation": "percentage",
+              "unit": "%"
+            }
+          ]
+        },
+        {
+          "x": 0,
+          "y": 26,
+          "w": 24,
+          "h": 3,
+          "i": "title-order-details",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "📦 订单详细指标 - Order Detail Metrics"
+            }
+          },
+          "graph": {
+            "type": "Text"
+          }
+        },
+        {
+          "x": 0,
+          "y": 29,
+          "w": 6,
+          "h": 10,
+          "i": "successful-orders",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "成功订单数"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_successful_orders"
+          ],
+          "metricConfig": [
+            {
+              "unit": "orders"
+            }
+          ]
+        },
+        {
+          "x": 6,
+          "y": 29,
+          "w": 6,
+          "h": 10,
+          "i": "failed-orders",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "失败订单数"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_failed_orders"
+          ],
+          "metricConfig": [
+            {
+              "unit": "orders"
+            }
+          ]
+        },
+        {
+          "x": 12,
+          "y": 29,
+          "w": 6,
+          "h": 10,
+          "i": "avg-order-value",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "平均订单金额"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_avg_order_value"
+          ],
+          "metricConfig": [
+            {
+              "unit": "¥"
+            }
+          ]
+        },
+        {
+          "x": 18,
+          "y": 29,
+          "w": 6,
+          "h": 10,
+          "i": "order-conversion",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "订单转化率"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_order_conversion"
+          ],
+          "metricConfig": [
+            {
+              "calculation": "percentage",
+              "unit": "%"
+            }
+          ]
+        },
+        {
+          "x": 0,
+          "y": 39,
+          "w": 24,
+          "h": 3,
+          "i": "title-business-operations",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "🔧 业务操作统计 - Business Operations"
+            }
+          },
+          "graph": {
+            "type": "Text"
+          }
+        },
+        {
+          "x": 0,
+          "y": 42,
+          "w": 8,
+          "h": 10,
+          "i": "top-operations",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "热门业务操作"
+            }
+          },
+          "graph": {
+            "type": "Bar",
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readLabeledMetricsValues"
+          ],
+          "metrics": [
+            "business_operations"
+          ],
+          "metricConfig": [
+            {
+              "unit": "operations"
+            }
+          ]
+        },
+        {
+          "x": 8,
+          "y": 42,
+          "w": 8,
+          "h": 10,
+          "i": "business-errors",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "业务错误统计"
+            }
+          },
+          "graph": {
+            "type": "Bar",
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readLabeledMetricsValues"
+          ],
+          "metrics": [
+            "business_errors"
+          ],
+          "metricConfig": [
+            {
+              "unit": "errors"
+            }
+          ]
+        },
+        {
+          "x": 16,
+          "y": 42,
+          "w": 8,
+          "h": 10,
+          "i": "business-health",
+          "type": "Widget",
+          "widget": {
+            "title": {
+              "text": "业务健康度"
+            }
+          },
+          "graph": {
+            "type": "Line",
+            "step": false,
+            "smooth": false,
+            "showSymbol": false,
+            "showXAxis": true,
+            "showYAxis": true
+          },
+          "metricTypes": [
+            "readMetricsValues"
+          ],
+          "metrics": [
+            "business_health_score"
+          ],
+          "metricConfig": [
+            {
+              "calculation": "percentage",
+              "unit": "%"
+            }
+          ]
+        }
+      ],
+      "name": "📊-业务指标监控大屏---Business-Metrics-Dashboard",
+      "layer": "GENERAL",
+      "entity": "ServiceInstance",
+      "isRoot": false
+    }
+  }
+]
+

@@ -1,0 +1,49 @@
+@startuml
+title 请求处理流程
+skinparam componentStyle rectangle
+
+package "网关层" {
+    [客户端请求] as Client
+    [Zuul网关] as Zuul
+}
+
+package "API层" {
+    component "api-basic模块" as ApiBasic
+    component "api-business模块" as ApiBusiness
+    component "api-order模块" as ApiOrder
+}
+
+package "服务层" {
+    component "service-basic服务" as ServiceBasic
+    component "service-business服务" as ServiceBusiness
+    component "service-order服务" as ServiceOrder
+}
+
+database "数据库" as DB
+
+Client -> Zuul : HTTP请求
+Zuul --> Zuul : 路由判断
+Zuul -> ApiBasic : /api/basic/**
+Zuul -> ApiBusiness : /api/business/**
+Zuul -> ApiOrder : /api/order/**
+
+ApiBasic --> ServiceBasic : 业务处理
+ApiBusiness --> ServiceBusiness : 业务处理
+ApiOrder --> ServiceOrder : 业务处理
+
+ServiceBasic --> DB : 数据访问
+ServiceBusiness --> DB : 数据访问
+ServiceOrder --> DB : 数据访问
+
+note right of Zuul
+  配置文件：
+  <mcfile name="application.yml" path="/Users/chenzhuo/Desktop/right/cloudHosServer/zuul/src/main/resources/application.yml"></mcfile>
+  核心路由类：
+  <mcsymbol name="ProductProviderFallback" filename="ProductProviderFallback.java" \npath="/Users/chenzhuo/Desktop/right/cloudHosServer/zuul/src/main/java/com/lulutong/zuul/filter/ProductProviderFallback.java"></mcsymbol>
+end note
+
+note right of ServiceOrder
+  支付处理工具类：
+  <mcsymbol name="WxPayKit" filename="WxPayKit.java" \npath="/Users/chenzhuo/Desktop/right/cloudHosServer/service/order/src/main/java/com/lulutong/order/util/pay/core/kit/WxPayKit.java"></mcsymbol>
+end note
+@enduml

@@ -1,0 +1,85 @@
+@startuml 支付系统核心流程架构
+
+title 支付系统 - 核心流程架构图
+
+!define LIGHTBLUE #E1F5FE
+!define LIGHTGREEN #E8F5E8
+!define LIGHTYELLOW #FFF9C4
+!define LIGHTPINK #FCE4EC
+!define LIGHTGRAY #F5F5F5
+
+box "支付发起流程" LIGHTBLUE
+  actor 用户 as User
+  participant "前端应用" as Frontend
+  participant "API网关" as Gateway
+  participant "支付核心" as PaymentCore
+  participant "渠道路由" as Router
+  participant "渠道服务" as Channel
+end box
+
+box "支付处理流程" LIGHTGREEN
+  participant "第三方支付" as ThirdParty
+  participant "回调接口" as Callback
+  participant "回调处理" as CallbackProcessor
+end box
+
+box "业务处理流程" LIGHTYELLOW
+  participant "订单服务" as OrderService
+  participant "库存服务" as InventoryService
+  participant "营销服务" as MarketingService
+  participant "通知服务" as NotificationService
+end box
+
+box "数据存储层" LIGHTPINK
+  database "支付订单库" as PaymentDB
+  database "业务订单库" as OrderDB
+  database "Redis缓存" as Cache
+  participant "消息队列" as Queue
+end box
+
+box "监控运维层" LIGHTGRAY
+  participant "监控系统" as Monitor
+  participant "日志系统" as Logger
+  participant "告警系统" as Alert
+end box
+
+== 1. 支付发起 ==
+User -> Frontend: 选择商品并支付
+Frontend -> Gateway: 创建支付订单
+Gateway -> PaymentCore: 验证并创建订单
+PaymentCore -> PaymentDB: 保存支付订单
+PaymentCore -> Router: 选择支付渠道
+Router -> Channel: 调用渠道接口
+Channel -> ThirdParty: 请求第三方支付
+ThirdParty -> Channel: 返回支付参数
+Channel -> Frontend: 返回支付信息
+Frontend -> User: 展示支付页面
+
+== 2. 支付执行 ==
+User -> ThirdParty: 完成支付操作
+ThirdParty -> Callback: 异步回调通知
+Callback -> CallbackProcessor: 处理支付结果
+CallbackProcessor -> PaymentDB: 更新支付状态
+CallbackProcessor -> Cache: 更新缓存状态
+CallbackProcessor -> Queue: 发送支付成功消息
+
+== 3. 业务处理 ==
+Queue -> OrderService: 消费支付成功消息
+OrderService -> OrderDB: 更新订单状态
+OrderService -> InventoryService: 扣减库存
+OrderService -> MarketingService: 处理营销活动
+OrderService -> NotificationService: 发送通知消息
+NotificationService -> User: 支付成功通知
+
+== 4. 监控运维 ==
+PaymentCore -> Monitor: 上报业务指标
+Channel -> Logger: 记录调用日志
+CallbackProcessor -> Monitor: 上报处理结果
+Monitor -> Alert: 异常情况告警
+
+note over User, ThirdParty : 前端交互层
+note over Gateway, Channel : 核心服务层
+note over PaymentDB, Queue : 数据存储层
+note over Monitor, Alert : 监控运维层
+
+@enduml

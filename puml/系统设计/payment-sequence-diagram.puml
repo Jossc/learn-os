@@ -1,0 +1,143 @@
+@startuml payment接口执行时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/pay/payment 订单支付接口执行时序图
+
+actor "前端用户" as Client
+participant "PayController" as Controller
+participant "PayServiceImpl" as PayService
+participant "OrderService" as OrderService
+participant "UserService" as UserService
+participant "ThirdRelateOrderService" as ThirdOrderService
+participant "OrderPayResultResponse" as Response
+
+box "支付处理分支" #LightBlue
+    participant "余额支付处理" as YuePay
+    participant "微信支付处理" as WechatPay
+    participant "支付宝支付处理" as AliPay
+    participant "支付管家处理" as AilianjkPay
+end box
+
+Client -> Controller: POST /api/front/pay/payment\n{orderNo, payType, payChannel, openId}
+activate Controller
+
+Controller -> PayService: payment(orderPayRequest)
+activate PayService
+
+note over PayService: 记录关键日志：订单支付开始
+
+PayService -> OrderService: getByOrderNo(orderNo)
+activate OrderService
+OrderService --> PayService: 返回订单信息
+deactivate OrderService
+
+note over PayService: 订单状态校验
+
+alt 订单已取消
+    PayService --> Controller: 抛出异常：ORDER_CANCEL
+else 订单已支付
+    PayService --> Controller: 抛出异常：ORDER_PAID
+else 订单状态异常
+    PayService --> Controller: 抛出异常：ORDER_STATUS_ABNORMAL
+end
+
+PayService -> UserService: getInfo()
+activate UserService
+UserService --> PayService: 返回当前用户信息
+deactivate UserService
+
+PayService -> PayService: 更新订单支付类型和渠道
+PayService -> PayService: 检查订单是否过期
+
+alt 订单已过期
+    PayService --> Controller: 抛出异常：订单已过期
+end
+
+alt 余额支付 && 余额不足
+    PayService --> Controller: 抛出异常：USER_BALANCE_INSUFFICIENT
+end
+
+PayService -> ThirdOrderService: 查询第三方关联订单
+activate ThirdOrderService
+ThirdOrderService --> PayService: 返回第三方订单信息
+deactivate ThirdOrderService
+
+PayService -> Response: 创建响应对象
+activate Response
+
+alt 支付金额 <= 0
+    PayService --> Controller: 抛出异常：支付金额不能低于等于0元
+end
+
+alt 余额支付
+    PayService -> YuePay: yuePay(order, user)
+    activate YuePay
+    note over YuePay: 执行余额支付逻辑\n扣减用户余额\n更新订单状态
+    YuePay --> PayService: 返回支付结果
+    deactivate YuePay
+    PayService -> Response: setStatus(支付结果)
+
+else 微信视频号支付
+    PayService -> WechatPay: 处理视频号支付
+    activate WechatPay
+    note over WechatPay: 组装视频号商品信息\n创建视频号订单\n获取支付参数
+    WechatPay --> PayService: 返回微信支付参数
+    deactivate WechatPay
+    PayService -> Response: 设置微信支付参数
+
+else 微信支付
+    PayService -> WechatPay: wechatPayment(order)
+    activate WechatPay
+    note over WechatPay: 调用微信预下单API\n生成支付参数
+    WechatPay --> PayService: 返回WxPayJsResultVo
+    deactivate WechatPay
+    PayService -> OrderService: updateById(order)
+    PayService -> Response: setJsConfig(微信支付参数)
+
+else 支付宝支付
+    PayService -> AliPay: aliPayment(order)
+    activate AliPay
+    note over AliPay: 调用支付宝预下单API\n生成支付请求字符串
+    AliPay --> PayService: 返回支付宝支付请求
+    deactivate AliPay
+    PayService -> OrderService: updateById(order)
+    PayService -> Response: setAlipayRequest(支付宝请求)
+
+else 支付管家支付
+    PayService -> AilianjkPay: ailianjkPayment(order, openId)
+    activate AilianjkPay
+    note over AilianjkPay: 调用支付管家API\n处理二清支付
+    AilianjkPay --> PayService: 返回支付管家支付请求
+    deactivate AilianjkPay
+    PayService -> OrderService: updateById(order)
+    PayService -> Response: 设置支付管家支付参数
+
+else 其他支付方式
+    PayService -> Response: setStatus(false)
+end
+
+PayService --> Controller: 返回OrderPayResultResponse
+deactivate Response
+deactivate PayService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回支付结果
+deactivate Controller
+
+note over Client
+返回的支付结果包含:
+- orderNo: 订单号
+- payType: 支付类型
+- payChannel: 支付渠道
+- status: 支付状态
+- jsConfig: 微信支付参数(微信支付)
+- alipayRequest: 支付宝请求(支付宝)
+- ailianjkpayRequest: 支付管家请求(支付管家)
+- channelCode: 渠道编码(第三方订单)
+end note
+
+@enduml

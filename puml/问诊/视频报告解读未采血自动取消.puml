@@ -1,0 +1,27 @@
+@startuml
+
+autonumber
+user ->cloudHosServer : benfefitsCreateReg 从权益中心发起问诊
+alt 如果是报告解读
+    cloudHosServer->: benefitscenter 调用权益查询用户是否有采血记录和报告
+    alt 如果同时没有 采血记录和报告
+        cloudHosServer-> cloudHosServer: 记录 没有采血记录和报告的用户问诊
+        loop 每天凌晨4点
+          定时器 -> 任务处理器: 扫描执行没有采血记录和报告的用户问诊并且是生效状态的数据
+              cloudHosServer->: benefitscenter 调用权益查询用户是否有采血记录和报告
+              benefitscenter->cloudHosServer: 返回数据
+              alt 距离预约时间小于72小时 如果当前用户还没有采血记录和报告
+                    cloudHosServer-> cloudHosServer : 调用 ProRegisterService#cancelOrder 取消问诊订单
+                    cloudHosServer->cloudHosServer: 把当前记录修改为失效状态 pro_register 修改状态为0,添加取消原因
+                    cloudHosServer->cloudHosServer: 修改
+                    cloudHosServer->cloudHosServer: 放入延迟队列中, 在早上9 10点发送短信,告诉用户已经取消
+
+              else 如果 有采血记录或报告
+                    cloudHosServer->cloudHosServer: 放入延迟队列中, 在早上9 10点发送短信
+                     cloudHosServer->cloudHosServer: 把当前记录修改为已经处理状态
+              end
+        end
+    end
+end
+
+@enduml

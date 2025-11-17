@@ -1,0 +1,181 @@
+@startuml 支付系统组件图
+!define LIGHTYELLOW #FFFACD
+!define LIGHTBLUE #E6F3FF
+!define LIGHTGREEN #E8F5E9
+!define LIGHTPINK #FFE6F0
+!define LIGHTORANGE #FFE5CC
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam backgroundColor white
+
+title 支付系统架构 - 组件图
+
+' 客户端层
+package "客户端层" LIGHTYELLOW {
+    [微信小程序] as MiniApp
+    [H5页面] as H5
+    [APP应用] as APP
+}
+
+' API网关层
+package "API网关层" LIGHTBLUE {
+    [API Gateway] as Gateway
+    [认证中心] as Auth
+    [限流熔断] as RateLimit
+}
+
+' 应用服务层
+package "应用服务层 (Spring Boot)" LIGHTGREEN {
+
+    package "控制器层" {
+        [PayController] as PayCtrl
+        [CallbackController] as CallbackCtrl
+    }
+
+    package "服务层" {
+        [PayServiceImpl] as PayService
+        [OrderService] as OrderSvc
+        [UserService] as UserSvc
+    }
+
+    package "策略工厂层" {
+        [ChannelPaymentStrategyFactory] as Factory
+    }
+
+    package "策略实现层" {
+        component "AilianjkPaymentStrategy\n(优先级: 1)" as Strategy1 LIGHTPINK
+        component "TaipingChannelPaymentStrategy\n(优先级: 2)" as Strategy2 LIGHTPINK
+        component "H5ChannelPaymentStrategy\n(优先级: 3)" as Strategy3 LIGHTPINK
+        component "DefaultPaymentStrategy\n(优先级: MAX)" as Strategy4 LIGHTPINK
+    }
+
+    package "第三方支付服务层" {
+        [WechatService] as WxSvc
+        [AlipayService] as AliSvc
+        [AilianjkPayService] as AljkSvc
+    }
+}
+
+' 第三方支付平台
+package "第三方支付平台" LIGHTORANGE {
+    cloud "微信支付平台" as WxPay {
+        [微信统一下单API]
+        [微信H5支付API]
+        [微信JSAPI支付]
+        [微信Native支付]
+    }
+
+    cloud "支付宝平台" as Alipay {
+        [支付宝H5支付API]
+        [支付宝APP支付API]
+        [支付宝当面付]
+    }
+
+    cloud "爱连接支付平台" as AilianjkPay {
+        [二清支付接口]
+    }
+}
+
+' 数据存储层
+package "数据存储层" {
+    database "MySQL\n(订单/用户)" as MySQL
+    database "Redis\n(缓存/会话)" as Redis
+    queue "MQ消息队列\n(支付通知)" as MQ
+}
+
+' 监控与日志
+package "监控与日志" {
+    [Prometheus监控] as Monitor
+    [ELK日志中心] as Log
+    [链路追踪] as Trace
+}
+
+' 关系连接
+MiniApp --> Gateway : HTTPS
+H5 --> Gateway : HTTPS
+APP --> Gateway : HTTPS
+
+Gateway --> Auth : 认证
+Gateway --> RateLimit : 限流
+Gateway --> PayCtrl : 路由转发
+Gateway --> CallbackCtrl : 支付回调
+
+PayCtrl --> PayService : 调用
+CallbackCtrl --> PayService : 调用
+
+PayService --> Factory : 获取策略
+PayService --> OrderSvc : 订单管理
+PayService --> UserSvc : 用户验证
+PayService --> WxSvc : 微信授权
+
+Factory ..> Strategy1 : 管理
+Factory ..> Strategy2 : 管理
+Factory ..> Strategy3 : 管理
+Factory ..> Strategy4 : 管理
+
+Strategy1 --> AljkSvc : 调用
+Strategy1 --> OrderSvc : 更新订单
+
+Strategy2 --> WxSvc : 微信支付
+Strategy2 --> AliSvc : 支付宝支付
+Strategy2 --> OrderSvc : 更新订单
+
+Strategy3 --> WxSvc : H5支付
+Strategy3 --> AliSvc : H5支付
+
+WxSvc --> WxPay : API调用
+AliSvc --> Alipay : API调用
+AljkSvc --> AilianjkPay : API调用
+
+OrderSvc --> MySQL : 读写订单
+UserSvc --> MySQL : 读取用户
+PayService --> Redis : 缓存
+PayService --> MQ : 发送消息
+
+PayService --> Monitor : 指标上报
+PayService --> Log : 日志记录
+PayService --> Trace : 链路追踪
+
+WxPay -.-> CallbackCtrl : 支付结果回调
+Alipay -.-> CallbackCtrl : 支付结果回调
+AilianjkPay -.-> CallbackCtrl : 支付结果回调
+
+note right of Factory
+  <b>策略工厂核心功能:</b>
+  • 启动时自动扫描注册所有策略
+  • 按优先级排序(getOrder)
+  • 策略匹配缓存(ConcurrentHashMap)
+  • 双重检查锁保证线程安全
+  • 责任链模式查找第一个匹配策略
+end note
+
+note bottom of Strategy2
+  <b>太平支付策略支持:</b>
+  • WX_LITE (微信小程序)
+  • WX_H5 (微信H5)
+  • WX_NATIVE (微信扫码)
+  • ALIPAY_APP (支付宝APP)
+  • ALIPAY_H5 (支付宝H5)
+
+  根据payChannel参数动态选择
+end note
+
+note bottom of MySQL
+  <b>主要数据表:</b>
+  • orders (订单表)
+  • users (用户表)
+  • payment_records (支付记录)
+  • refund_records (退款记录)
+end note
+
+note right of Redis
+  <b>缓存内容:</b>
+  • 用户会话
+  • 订单缓存
+  • 策略匹配结果
+  • 限流计数器
+end note
+
+@enduml
+

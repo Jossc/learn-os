@@ -1,0 +1,101 @@
+@startuml 加入购物车接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/cart/add 加入购物车接口执行时序图
+
+actor "前端用户" as Client
+participant "CartController" as Controller
+participant "CartService" as CartService
+participant "UserService" as UserService
+participant "ProductService" as ProductService
+participant "ProductAttrValueService" as AttrService
+participant "CartMapper" as CartMapper
+
+box "数据验证" #LightBlue
+    participant "ProductValidator" as Validator
+end box
+
+Client -> Controller: POST /api/front/cart/add\n{productId, attrValueId, cartNum}
+activate Controller
+
+Controller -> CartService: add(CartRequest)
+activate CartService
+
+note over CartService: 开始添加购物车流程
+
+CartService -> UserService: 获取当前用户ID
+activate UserService
+UserService --> CartService: 返回用户ID
+deactivate UserService
+
+CartService -> ProductService: 验证商品信息
+activate ProductService
+ProductService --> CartService: 返回商品详情
+deactivate ProductService
+
+CartService -> Validator: 验证商品状态
+activate Validator
+note over Validator: 检查商品是否上架\n验证商品是否删除\n确认商品可购买
+alt 商品验证失败
+    Validator --> CartService: 抛出商品状态异常
+    CartService --> Controller: 返回false
+else 商品验证成功
+    Validator --> CartService: 验证通过
+    deactivate Validator
+end
+
+CartService -> AttrService: 验证SKU规格信息
+activate AttrService
+AttrService --> CartService: 返回SKU详情和库存
+deactivate AttrService
+
+CartService -> CartService: 检查库存是否充足
+note over CartService: 验证库存数量\n确保可添加数量
+
+alt 库存不足
+    CartService --> Controller: 返回false（库存不足）
+end
+
+CartService -> CartService: 检查购物车中是否已存在该商品
+note over CartService: 查询相同商品和规格
+
+alt 商品已存在购物车
+    CartService -> CartMapper: 更新购物车商品数量
+    activate CartMapper
+    note over CartMapper: 累加购买数量\n更新修改时间
+    CartMapper --> CartService: 更新成功
+    deactivate CartMapper
+else 商品不存在购物车
+    CartService -> CartMapper: 新增购物车记录
+    activate CartMapper
+    note over CartMapper: 插入新的购物车记录\n设置用户ID、商品ID、数量等
+    CartMapper --> CartService: 新增成功
+    deactivate CartMapper
+end
+
+CartService -> CartService: 记录操作日志
+note over CartService: 记录用户购物车操作
+
+CartService --> Controller: 返回true（添加成功）
+deactivate CartService
+
+Controller -> Controller: 判断返回结果
+alt 添加成功
+    Controller --> Client: CommonResult.success()
+else 添加失败
+    Controller --> Client: CommonResult.failed()
+end
+deactivate Controller
+
+note over Client
+加入购物车成功后:
+- 购物车数量更新
+- 可以继续浏览或去购物车结算
+- 系统记录用户购物行为
+end note
+
+@enduml

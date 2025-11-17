@@ -1,0 +1,218 @@
+@startuml 支付策略执行流程图(两层策略模式)
+!theme plain
+skinparam backgroundColor white
+skinparam activityDiamondBackgroundColor #E6F3FF
+skinparam activityStartColor #4CAF50
+skinparam activityEndColor #F44336
+skinparam activityBackgroundColor #FFFACD
+
+title 支付策略匹配与执行流程图（两层策略模式）
+
+start
+
+:用户发起支付请求;
+:PayController接收请求\n{channelFrom, payChannel, orderNo};
+
+:PayServiceImpl处理;
+
+partition "前置校验" {
+    :校验用户登录状态;
+
+    :OrderService.getById()\n查询订单信息;
+
+    if (订单是否存在?) then (否)
+        :抛出异常: 订单不存在;
+        stop
+    endif
+
+    if (订单是否已取消?) then (是)
+        :返回: 订单已取消;
+        stop
+    endif
+
+    if (订单是否已支付?) then (是)
+        :返回: 订单已支付;
+        stop
+    endif
+}
+
+partition "获取支付授权" {
+    if (是微信支付 && code不为空?) then (是)
+        :WechatService.miniAuthCode()\n获取openId;
+    endif
+}
+
+:构建PaymentContext\n支付上下文对象;
+
+partition "第一层策略：渠道选择" #E8F5E9 {
+    :ChannelStrategyFactory\n.getChannel(channelFrom);
+
+    if (缓存中存在?) then (是)
+        :从channelCache\n获取缓存策略;
+    else (否)
+        :进入synchronized同步块;
+        :双重检查缓存;
+
+        if (缓存中存在?) then (是)
+            :返回缓存策略;
+        else (否)
+            :遍历sortedChannels;
+
+            repeat
+                :取出渠道策略ChannelStrategy;
+                :调用strategy.support(channelFrom);
+
+                if (策略是否支持?) then (是)
+                    :缓存到channelCache;
+                    :返回匹配的渠道策略;
+                    break
+                endif
+            repeat while (还有未检查的策略?) is (是)
+        endif
+    endif
+
+    note right
+        <b>第一层匹配完成</b>
+        根据 channelFrom 选择渠道:
+        • ailianjkpay → AilianjkChannelStrategy
+        • taiping → TaipingChannelStrategy
+        • h5pay → H5ChannelStrategy
+    end note
+}
+
+partition "执行渠道策略" #FFE6F0 {
+    :channelStrategy.execute(context);
+
+    if (渠道类型?) then (AilianjkChannelStrategy\n优先级1)
+        :修改payType为"twoclear";
+        :AilianjkPayService\n.channelTwoClearPay();
+        :解析支付结果JSON;
+        :设置ailianjkTwoClearpayRequest;
+        :更新订单;
+        :返回支付结果;
+
+    elseif (TaipingChannelStrategy\n或 H5ChannelStrategy\n优先级2-3) then
+
+        partition "第二层策略：支付方式选择" #FFE5CC {
+            :PaymentMethodStrategyFactory\n.getMethod(payChannel);
+
+            if (缓存中存在?) then (是)
+                :从methodCache\n获取缓存策略;
+            else (否)
+                :进入synchronized同步块;
+                :双重检查缓存;
+
+                if (缓存中存在?) then (是)
+                    :返回缓存策略;
+                else (否)
+                    :遍历sortedMethods;
+
+                    repeat
+                        :取出支付方式策略;
+                        :调用strategy.support(payChannel);
+
+                        if (策略是否支持?) then (是)
+                            :缓存到methodCache;
+                            :返回匹配的支付方式策略;
+                            break
+                        endif
+                    repeat while (还有未检查的策略?) is (是)
+                endif
+            endif
+
+            note right
+                <b>第二层匹配完成</b>
+                根据 payChannel 选择支付方式:
+                • WX_LITE → WechatLitePayStrategy
+                • WX_H5 → WechatH5PayStrategy
+                • WX_NATIVE → WechatNativePayStrategy
+                • ALIPAY_H5 → AlipayH5PayStrategy
+                • ALIPAY_APP → AlipayAppPayStrategy
+            end note
+        }
+
+        partition "执行支付方式策略" #E1BEE7 {
+            :paymentMethodStrategy.execute(context);
+
+            if (支付方式?) then (WechatLitePayStrategy)
+                :WechatService.createWxLiteOrder();
+                :设置wxLitePayRequest;
+
+            elseif (WechatH5PayStrategy) then
+                :WechatService.createWxH5Order();
+                :设置wxH5PayRequest;
+
+            elseif (WechatNativePayStrategy) then
+                :WechatService.createWxNativeOrder();
+                :设置wxNativePayRequest;
+
+            elseif (AlipayH5PayStrategy) then
+                :AlipayService.createH5Order();
+                :设置alipayH5PayRequest;
+
+            elseif (AlipayAppPayStrategy) then
+                :AlipayService.createAppOrder();
+                :设置alipayAppPayRequest;
+
+            else (DefaultPaymentMethodStrategy)
+                :设置status=false;
+                :设置message="不支持的支付方式";
+            endif
+
+            :返回支付结果;
+        }
+
+        :更新订单;
+
+    else (DefaultChannelStrategy\n优先级MAX)
+        :设置status=false;
+        :设置message="不支持的渠道";
+    endif
+}
+
+:返回OrderPayResultResponse;
+
+partition "客户端调起支付" {
+    if (支付类型?) then (微信支付)
+        :客户端调用wx.requestPayment();
+        :用户完成微信支付;
+    elseif (支付宝支付) then
+        :客户端跳转支付宝收银台;
+        :用户完成支付宝支付;
+    else (爱连接支付)
+        :调用爱连接SDK;
+        :用户完成支付;
+    endif
+}
+
+:第三方支付平台\n异步回调通知;
+
+:PaymentCallbackHandler\n处理支付结果;
+
+:更新订单状态为已支付;
+
+:发送支付成功消息;
+
+stop
+
+note right
+  <b>两层策略模式优势:</b>
+
+  <b>1. 职责分离</b>
+  • 第一层：渠道选择（业务渠道）
+  • 第二层：支付方式选择（技术实现）
+
+  <b>2. 高内聚低耦合</b>
+  • 每个策略独立实现
+  • 策略间互不依赖
+
+  <b>3. 易于扩展</b>
+  • 新增渠道：实现ChannelStrategy
+  • 新增支付方式：实现PaymentMethodStrategy
+
+  <b>4. 灵活组合</b>
+  • 不同渠道可选择不同支付方式
+  • 支持渠道级别的特殊处理
+end note
+
+@enduml

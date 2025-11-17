@@ -1,0 +1,147 @@
+@startuml 推荐系统整体架构图
+
+!define RECTANGLE class
+
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+
+title 药品推荐系统 - 整体架构图
+
+' 定义颜色
+skinparam component {
+    BackgroundColor<<client>> #E3F2FD
+    BackgroundColor<<service>> #FFF3E0
+    BackgroundColor<<strategy>> #E8F5E9
+    BackgroundColor<<data>> #FCE4EC
+    BackgroundColor<<cache>> #F3E5F5
+}
+
+package "客户端层" <<client>> {
+    [Web前端] as web
+    [移动端APP] as app
+    [小程序] as miniapp
+}
+
+package "接口层" <<service>> {
+    [RecommendationController] as controller
+    note right of controller
+        接口端点：
+        - POST /api/recommend
+        - GET /api/home
+        - GET /api/similar/{id}
+    end note
+}
+
+package "推荐服务层" <<service>> {
+    [RecommendationStrategyFactory] as factory
+    note right of factory
+        核心职责：
+        1. 策略注册管理
+        2. 自动策略选择
+        3. 策略降级处理
+        4. 混合推荐调度
+    end note
+}
+
+package "推荐策略层" <<strategy>> {
+    interface "RecommendationStrategy" as strategy_interface {
+        + getStrategyName(): String
+        + recommend(request): Response
+        + isApplicable(request): boolean
+        + getPriority(): int
+    }
+
+    [UserBasedCFStrategy\n优先级: 10] as user_cf
+    [ItemBasedCFStrategy\n优先级: 20] as item_cf
+    [ContentBasedStrategy\n优先级: 30] as content
+    [HybridStrategy\n优先级: 5] as hybrid
+    [HotStrategy\n优先级: 90] as hot
+    [DefaultStrategy\n优先级: 100] as default
+}
+
+package "辅助工具层" <<service>> {
+    [RecommendationHelper] as helper
+    note right of helper
+        工具方法：
+        - 构建响应对象
+        - 结果排序筛选
+        - 药品信息填充
+        - 推荐理由生成
+    end note
+}
+
+package "数据访问层 (Mapper)" <<data>> {
+    [UserSimilarityMapper] as user_sim_mapper
+    [MedicineSimilarityMapper] as med_sim_mapper
+    [UserBehaviorStatsMapper] as behavior_mapper
+    [MedicineInfoMapper] as medicine_mapper
+}
+
+package "缓存层" <<cache>> {
+    database "Redis" as redis {
+        frame "缓存数据" {
+            [用户相似度缓存]
+            [药品相似度缓存]
+            [推荐结果缓存]
+            [热门榜单缓存]
+        }
+    }
+}
+
+package "数据库层" <<data>> {
+    database "MySQL" as mysql {
+        frame "核心表" {
+            [user_similarity]
+            [medicine_similarity]
+            [user_behavior_stats]
+            [medicine_info]
+        }
+    }
+}
+
+' 关系连接
+web --> controller
+app --> controller
+miniapp --> controller
+
+controller --> factory : 调用推荐
+
+factory ..> strategy_interface : 使用
+strategy_interface <|.. user_cf : 实现
+strategy_interface <|.. item_cf : 实现
+strategy_interface <|.. content : 实现
+strategy_interface <|.. hybrid : 实现
+strategy_interface <|.. hot : 实现
+strategy_interface <|.. default : 实现
+
+hybrid --> user_cf : 组合
+hybrid --> item_cf : 组合
+hybrid --> content : 组合
+
+user_cf --> helper : 使用
+item_cf --> helper : 使用
+content --> helper : 使用
+
+user_cf --> user_sim_mapper : 查询
+user_cf --> behavior_mapper : 查询
+item_cf --> med_sim_mapper : 查询
+content --> medicine_mapper : 查询
+hot --> behavior_mapper : 查询
+
+user_sim_mapper --> redis : 读取缓存
+med_sim_mapper --> redis : 读取缓存
+
+user_sim_mapper --> mysql : 查询数据
+med_sim_mapper --> mysql : 查询数据
+behavior_mapper --> mysql : 查询数据
+medicine_mapper --> mysql : 查询数据
+
+note bottom of mysql
+    数据更新策略：
+    - 相似度表：每天凌晨2点更新
+    - 行为统计：实时增量更新
+    - 药品信息：按需同步
+end note
+
+@enduml
+

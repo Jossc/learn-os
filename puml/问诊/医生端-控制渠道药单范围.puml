@@ -1,0 +1,32 @@
+@startuml
+
+autonumber
+== 诊断开方页面开始 ==
+
+user->cloudHosServer:跳转到诊断开方页
+cloudHosServer->cloudHosServer: 获取当前用户问诊的权益卡id
+cloudHosServer->benefitsCenter: 根据权益卡id换取否配置渠道药单,返回渠道药单名称和id
+cloudHosServer->mall :根据药单id 换取二级类目id. 名称
+cloudHosServer->user: 展示选中的 渠道药单下的 二级类目id. 名称
+
+user->cloudHosServer: 医生点击左侧二级类目查询类目下的药品
+cloudHosServer->mall: 传入渠道药单id,二级类目id 分页参数
+mall->cloudHosServer: 响应商品数据
+cloudHosServer->user: 吐出商品数据
+
+user->cloudHosServer: 医生 在搜索框搜索药品数据
+cloudHosServer->mall: 传入渠道药单id、检索的药品名称
+mall->cloudHosServer: 响应商品数据
+cloudHosServer->user: 吐出商品数据
+
+
+== 诊断开方页面结束 ==
+
+
+
+
+
+
+
+
+@enduml

@@ -1,0 +1,102 @@
+@startuml 商品详情接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/product/detail/{id} 商品详情接口执行时序图
+
+actor "前端用户" as Client
+participant "ProductController" as Controller
+participant "FrontProductService" as ProductService
+participant "UserService" as UserService
+participant "ProductAttrValueService" as AttrService
+participant "MerchantService" as MerchantService
+participant "CouponService" as CouponService
+participant "CollectService" as CollectService
+participant "ProductReplyService" as ReplyService
+participant "CartService" as CartService
+participant "ProductDetailResponse" as Response
+
+Client -> Controller: GET /api/front/product/detail/8099\n?type=normal&priceFlag=100&province=xxx
+activate Controller
+
+Controller -> ProductService: getDetail(id, type, priceFlag, province, city, phone)
+activate ProductService
+
+note over ProductService: 开始获取商品详情
+
+ProductService -> ProductService: 查询商品基本信息
+note over ProductService: 验证商品存在性\n检查商品状态\n获取商品基础数据
+
+ProductService -> UserService: 获取当前用户信息（如果已登录）
+activate UserService
+UserService --> ProductService: 返回用户信息
+deactivate UserService
+
+ProductService -> AttrService: 获取商品规格属性信息
+activate AttrService
+AttrService --> ProductService: 返回SKU列表和价格信息
+deactivate AttrService
+
+ProductService -> MerchantService: 获取商家详细信息
+activate MerchantService
+MerchantService --> ProductService: 返回商家信息
+deactivate MerchantService
+
+alt 用户已登录
+    ProductService -> CollectService: 检查用户是否收藏该商品
+    activate CollectService
+    CollectService --> ProductService: 返回收藏状态
+    deactivate CollectService
+
+    ProductService -> CartService: 检查商品是否在购物车中
+    activate CartService
+    CartService --> ProductService: 返回购物车状态
+    deactivate CartService
+end
+
+ProductService -> CouponService: 获取商品相关优惠券
+activate CouponService
+CouponService --> ProductService: 返回可用优惠券列表
+deactivate CouponService
+
+ProductService -> ReplyService: 获取商品评价统计
+activate ReplyService
+ReplyService --> ProductService: 返回评价数量和好评率
+deactivate ReplyService
+
+ProductService -> ProductService: 根据地理位置计算运费
+note over ProductService: 基于province参数\n计算配送费用
+
+ProductService -> ProductService: 根据priceFlag处理价格展示
+note over ProductService: priceFlag=0: 最低价\npriceFlag=100: 全部SKU价格
+
+ProductService -> Response: 组装商品详情响应
+activate Response
+
+note over Response: ProductDetailResponse包含:\n- 商品基本信息\n- SKU规格价格列表\n- 商家信息\n- 用户收藏状态\n- 购物车状态\n- 可用优惠券\n- 评价统计\n- 运费信息
+
+ProductService --> Controller: 返回ProductDetailResponse
+deactivate Response
+deactivate ProductService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回商品详情数据
+deactivate Controller
+
+note over Client
+返回的商品详情包含:
+- storeInfo: 商品基本信息
+- productAttr: 商品规格属性
+- productValue: SKU价格列表
+- storeInfo: 商家信息
+- userCollect: 用户收藏状态
+- cartNum: 购物车中数量
+- coupons: 可用优惠券
+- reply: 评价统计
+- freight: 运费信息
+end note
+
+@enduml

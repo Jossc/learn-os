@@ -1,0 +1,20 @@
+@startuml
+
+autonumber
+
+== 等待接诊界面进入判断是否需要添加主诉开始 ==
+
+user ->cloudHosServer : 根据reg_id 查询 pro_register中换到患者资料id
+cloudHosServer->cloudHosServer: 根据患者资料id 查询patient_records 查询 disease_descriptio 是否有值
+cloudHosServer->cloudHosServer: 查询当前req_id的渠道来源
+cloudHosServer->user: 返回 渠道来源、是否需要添加患者主诉标签,patient_records的主键id
+== 等待接诊界面进入判断是否需要添加主结束 ==
+
+
+== 更新患者主诉开始 ==
+user->cloudHosServer:提交 主诉,入参reg_id、patient_records的主键id
+cloudHosServer->cloudHosServer: 更新 patient_records中主诉字段
+cloudHosServer->user:更新完成
+== 更新患者主诉结束 ==
+
+@enduml

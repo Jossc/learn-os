@@ -1,0 +1,174 @@
+@startuml 策略类图
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title 推荐-策略模式类图
+
+interface RecommendationStrategy {
+    + {abstract} getStrategyName(): String
+    + {abstract} recommend(request: RecommendationRequest): MedicineRecommendationResponse
+    + {abstract} isApplicable(request: RecommendationRequest): boolean
+    + getPriority(): int {default: 100}
+}
+
+class RecommendationStrategyFactory {
+    - strategies: List<RecommendationStrategy>
+
+    + recommend(request: RecommendationRequest): MedicineRecommendationResponse
+    + getAllStrategyNames(): List<String>
+    - selectStrategy(request: RecommendationRequest): RecommendationStrategy
+    - executeWithFallback(request: RecommendationRequest): MedicineRecommendationResponse
+}
+
+class UserBasedCFStrategy {
+    - userSimilarityMapper: UserSimilarityMapper
+    - behaviorStatsMapper: UserBehaviorStatsMapper
+    - helper: RecommendationHelper
+
+    + getStrategyName(): String {"USER_BASED_CF"}
+    + getPriority(): int {10}
+    + isApplicable(request): boolean
+    + recommend(request): MedicineRecommendationResponse
+    - findSimilarUsers(userId): List<UserSimilarity>
+    - collectCandidateMedicines(users): Map<String, Double>
+}
+
+class ItemBasedCFStrategy {
+    - medicineSimilarityMapper: MedicineSimilarityMapper
+    - helper: RecommendationHelper
+
+    + getStrategyName(): String {"ITEM_BASED_CF"}
+    + getPriority(): int {20}
+    + isApplicable(request): boolean
+    + recommend(request): MedicineRecommendationResponse
+    - findSimilarMedicines(medicineId): List<MedicineSimilarity>
+}
+
+class ContentBasedStrategy {
+    - medicineInfoMapper: MedicineInfoMapper
+    - helper: RecommendationHelper
+
+    + getStrategyName(): String {"CONTENT_BASED"}
+    + getPriority(): int {30}
+    + isApplicable(request): boolean
+    + recommend(request): MedicineRecommendationResponse
+    - calculateContentSimilarity(m1, m2): double
+    - extractFeatures(medicine): FeatureVector
+}
+
+class HybridRecommendationStrategy {
+    - userBasedCF: UserBasedCFStrategy
+    - itemBasedCF: ItemBasedCFStrategy
+    - contentBased: ContentBasedStrategy
+    - helper: RecommendationHelper
+
+    + getStrategyName(): String {"HYBRID"}
+    + getPriority(): int {5}
+    + isApplicable(request): boolean
+    + recommend(request): MedicineRecommendationResponse
+    - aggregateResults(responses): Map<String, Double>
+    - calculateFinalScore(scores, count): double
+}
+
+class HotRecommendationStrategy {
+    - behaviorStatsMapper: UserBehaviorStatsMapper
+    - helper: RecommendationHelper
+
+    + getStrategyName(): String {"HOT"}
+    + getPriority(): int {90}
+    + isApplicable(request): boolean
+    + recommend(request): MedicineRecommendationResponse
+    - getHotMedicines(type): List<String>
+}
+
+class DefaultRecommendationStrategy {
+    - medicineInfoMapper: MedicineInfoMapper
+    - helper: RecommendationHelper
+
+    + getStrategyName(): String {"DEFAULT"}
+    + getPriority(): int {100}
+    + isApplicable(request): boolean
+    + recommend(request): MedicineRecommendationResponse
+}
+
+class RecommendationHelper {
+    - medicineInfoMapper: MedicineInfoMapper
+
+    + buildRecommendationResponse(...): MedicineRecommendationResponse
+    + sortAndLimit(scores, topN): List<String>
+    + enrichMedicineInfo(medicineIds): List<RecommendedMedicine>
+    + generateReason(strategy, medicine): String
+}
+
+class RecommendationRequest {
+    - userId: String
+    - medicineId: String
+    - medicineType: String
+    - topN: Integer
+    - strategyName: String
+    - enableFallback: Boolean
+    - excludeMedicineIds: List<String>
+}
+
+class MedicineRecommendationResponse {
+    - algorithm: String
+    - totalCount: Integer
+    - recommendations: List<RecommendedMedicine>
+    - timestamp: Long
+}
+
+class "RecommendedMedicine" as RecMed {
+    - medicineId: String
+    - medicineName: String
+    - medicineType: String
+    - similarityScore: Double
+    - reason: String
+    - price: BigDecimal
+    - specification: String
+}
+
+' 关系
+RecommendationStrategy <|.. UserBasedCFStrategy : implements
+RecommendationStrategy <|.. ItemBasedCFStrategy : implements
+RecommendationStrategy <|.. ContentBasedStrategy : implements
+RecommendationStrategy <|.. HybridRecommendationStrategy : implements
+RecommendationStrategy <|.. HotRecommendationStrategy : implements
+RecommendationStrategy <|.. DefaultRecommendationStrategy : implements
+
+RecommendationStrategyFactory o--> "many" RecommendationStrategy : manages
+
+HybridRecommendationStrategy --> UserBasedCFStrategy : uses
+HybridRecommendationStrategy --> ItemBasedCFStrategy : uses
+HybridRecommendationStrategy --> ContentBasedStrategy : uses
+
+UserBasedCFStrategy --> RecommendationHelper : uses
+ItemBasedCFStrategy --> RecommendationHelper : uses
+ContentBasedStrategy --> RecommendationHelper : uses
+HybridRecommendationStrategy --> RecommendationHelper : uses
+HotRecommendationStrategy --> RecommendationHelper : uses
+
+RecommendationStrategyFactory ..> RecommendationRequest : uses
+RecommendationStrategy ..> RecommendationRequest : uses
+RecommendationStrategy ..> MedicineRecommendationResponse : returns
+RecommendationHelper ..> MedicineRecommendationResponse : creates
+
+MedicineRecommendationResponse *--> "many" RecMed : contains
+
+note right of RecommendationStrategy
+    策略接口定义了所有推荐策略
+    必须实现的核心方法
+end note
+
+note bottom of HybridRecommendationStrategy
+    混合策略组合了多个子策略，
+    采用加权融合算法综合推荐结果
+end note
+
+note right of RecommendationStrategyFactory
+    工厂类负责策略的注册、选择
+    和执行，支持自动降级机制
+end note
+
+@enduml
+

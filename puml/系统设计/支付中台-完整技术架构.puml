@@ -1,0 +1,303 @@
+@startuml 支付中台完整技术架构
+
+!theme plain
+skinparam backgroundColor white
+skinparam linetype ortho
+
+title <size:18><b>支付中台 - 完整技术架构图</b></size>\n<size:12>支持配置化、风控、智能路由的企业级支付平台</size>
+
+' ========== 接入层 ==========
+package "**接入层**" as AccessLayer #E6F3FF {
+  [小程序] as MiniApp
+  [H5/Web] as H5
+  [APP] as APP
+  [API/OpenAPI] as API
+}
+
+' ========== 网关层 ==========
+package "**网关层**" as GatewayLayer #F0F8FF {
+  component "API Gateway" as APIGateway {
+    [认证鉴权]
+    [限流熔断]
+    [参数校验]
+    [日志记录]
+  }
+}
+
+' ========== 业务服务层 ==========
+package "**业务服务层**" as ServiceLayer #FFF8E6 {
+
+  component "支付服务" as PaymentService #FFE4B5 {
+    [PayController]
+    [PayServiceImpl]
+    [订单服务]
+  }
+
+  component "**第一层策略：渠道选择**" as L1Strategy #FFD700 {
+    rectangle "ChannelStrategyFactory\n<size:11>根据channelFrom选择渠道</size>" as ChannelFactory #FFA500
+
+    card "AilianjkChannelStrategy\n<size:10>爱联健康渠道</size>" as AilianjkChannel
+    card "TaipingChannelStrategy\n<size:10>太平保险渠道</size>" as TaipingChannel
+    card "H5ChannelStrategy\n<size:10>H5通用渠道</size>" as H5Channel
+
+    ChannelFactory --> AilianjkChannel
+    ChannelFactory --> TaipingChannel
+    ChannelFactory --> H5Channel
+  }
+
+  component "**第二层策略：支付方式**" as L2Strategy #90EE90 {
+    rectangle "PaymentMethodStrategyFactory\n<size:11>根据payChannel选择支付方式</size>" as MethodFactory #32CD32
+
+    card "WechatLitePayStrategy\n<size:10>微信小程序支付</size>" as WxLite
+    card "WechatH5PayStrategy\n<size:10>微信H5支付</size>" as WxH5
+    card "AlipayH5PayStrategy\n<size:10>支付宝H5支付</size>" as AliH5
+    card "AlipayAppPayStrategy\n<size:10>支付宝APP支付</size>" as AliApp
+
+    MethodFactory --> WxLite
+    MethodFactory --> WxH5
+    MethodFactory --> AliH5
+    MethodFactory --> AliApp
+  }
+}
+
+' ========== 核心引擎层 ==========
+package "**核心引擎层**" as EngineLayer #E0FFE0 {
+
+  component "**风控引擎**" as RiskEngine #87CEEB {
+    [实时风控决策] as RealTimeRisk
+    [规则引擎\n<size:10>Drools</size>] as RuleEngine
+    [黑名单检查] as BlackList
+    [限额检查] as LimitCheck
+    [风险评分] as RiskScore
+  }
+
+  component "**智能路由引擎**" as RouteEngine #DDA0DD {
+    [路由配置管理] as RouteConfig
+    [渠道健康检查] as HealthCheck
+    [成功率路由] as SuccessRoute
+    [成本优化路由] as CostRoute
+    [自动切换引擎] as AutoSwitch
+  }
+
+  component "**支付编排引擎**" as OrchEngine #FFB6C1 {
+    [支付上下文] as PayContext
+    [策略编排] as StrategyOrch
+    [幂等控制] as Idempotent
+    [重试机制] as Retry
+  }
+}
+
+' ========== 渠道适配层 ==========
+package "**渠道适配层**" as ChannelAdapter #FFF0F5 {
+  component "微信支付适配器" as WxAdapter {
+    [微信V3接口]
+    [签名验签]
+    [回调处理]
+  }
+
+  component "支付宝适配器" as AliAdapter {
+    [支付宝SDK]
+    [签名验签]
+    [回调处理]
+  }
+
+  component "银联适配器" as UnionAdapter {
+    [银联接口]
+    [加密解密]
+    [回调处理]
+  }
+}
+
+' ========== 数据层 ==========
+package "**数据层**" as DataLayer #F5F5F5 {
+  database "MySQL" as MySQL {
+    frame "业务库" {
+      [订单表 orders]
+      [支付记录表 payment_record]
+    }
+
+    frame "**配置库**" {
+      [渠道配置表\nchannel_config] as ChannelConfigTable
+      [支付方式配置表\npayment_method_config] as MethodConfigTable
+      [路由规则表\nroute_rule_config] as RouteRuleTable
+      [风控规则表\nrisk_rule_config] as RiskRuleTable
+      [限额配置表\nlimit_config] as LimitConfigTable
+    }
+  }
+
+  database "Redis" as Redis {
+    [渠道缓存]
+    [策略缓存]
+    [限流计数]
+    [幂等记录]
+  }
+
+  queue "Kafka" as Kafka {
+    [支付事件]
+    [风控事件]
+    [审计日志]
+  }
+}
+
+' ========== 外部服务 ==========
+cloud "**第三方支付**" as ThirdParty #FFE4E1 {
+  [微信支付] as WxPay
+  [支付宝] as Alipay
+  [银联] as UnionPay
+}
+
+' ========== 监控运维 ==========
+package "**监控运维**" as Monitor #FFFACD {
+  [Prometheus\n指标采集] as Prom
+  [Grafana\n监控大盘] as Grafana
+  [ELK\n日志分析] as ELK
+  [告警中心] as Alert
+}
+
+' ========== 连接关系 ==========
+
+' 接入层 -> 网关
+MiniApp --> APIGateway
+H5 --> APIGateway
+APP --> APIGateway
+API --> APIGateway
+
+' 网关 -> 业务服务
+APIGateway --> PaymentService
+
+' 业务服务 -> 核心引擎
+PaymentService --> RiskEngine : 1. 风控检查
+PaymentService --> RouteEngine : 2. 智能路由
+PaymentService --> L1Strategy : 3. 选择渠道
+
+' 第一层策略 -> 第二层策略
+TaipingChannel --> L2Strategy : 调用支付方式策略
+
+' 第二层策略 -> 渠道适配器
+WxLite --> WxAdapter
+WxH5 --> WxAdapter
+AliH5 --> AliAdapter
+AliApp --> AliAdapter
+
+' 渠道适配器 -> 第三方
+WxAdapter --> WxPay
+AliAdapter --> Alipay
+UnionAdapter --> UnionPay
+
+' 引擎 -> 数据层
+RiskEngine --> MySQL : 读取风控规则
+RiskEngine --> Redis : 黑名单缓存
+RouteEngine --> MySQL : 读取路由规则
+RouteEngine --> Redis : 渠道健康状态
+OrchEngine --> MySQL : 订单数据
+OrchEngine --> Redis : 幂等控制
+
+' 事件发送
+PaymentService --> Kafka : 发送支付事件
+RiskEngine --> Kafka : 发送风控事件
+
+' 监控
+Prom .up.> PaymentService
+Prom .up.> RiskEngine
+Prom .up.> RouteEngine
+ELK .up.> PaymentService
+Grafana --> Prom
+
+' ========== 核心流程说明 ==========
+note top of L1Strategy
+  <b>第一层策略：渠道策略</b>
+  ═══════════════════════
+  • 根据 channelFrom 参数选择
+  • 支持数据库配置化
+  • 每个渠道独立实现
+  • 可动态扩展新渠道
+
+  <b>配置示例：</b>
+  channelFrom = "taiping"
+  → TaipingChannelStrategy
+end note
+
+note top of L2Strategy
+  <b>第二层策略：支付方式策略</b>
+  ═══════════════════════
+  • 根据 payChannel 参数选择
+  • 支持数据库配置化
+  • 每个支付方式独立实现
+  • 可动态扩展新支付方式
+
+  <b>配置示例：</b>
+  payChannel = "WX_LITE"
+  → WechatLitePayStrategy
+end note
+
+note right of RiskEngine
+  <b>风控能力</b>
+  ══════════
+  • 实时风险评估
+  • 多维度规则引擎
+  • 黑名单/白名单
+  • 异常交易拦截
+  • 限额控制
+  • 风险评分模型
+end note
+
+note right of RouteEngine
+  <b>智能路由能力</b>
+  ══════════════
+  • 基于成功率路由
+  • 基于成本优化
+  • 基于限额路由
+  • 地域路由
+  • 渠道健康检查
+  • 故障自动切换
+  • A/B测试支持
+end note
+
+note bottom of ChannelConfigTable
+  <b>数据库配置化设计</b>
+  ═══════════════════
+
+  <b>1. 渠道配置表 (channel_config)</b>
+  • channel_code: 渠道编码
+  • channel_name: 渠道名称
+  • priority: 优先级
+  • status: 启用/禁用
+  • strategy_class: 策略类名
+
+  <b>2. 支付方式配置表</b>
+  • method_code: 支付方式编码
+  • method_name: 支付方式名称
+  • channel_code: 所属渠道
+  • priority: 优先级
+  • strategy_class: 策略类名
+
+  <b>3. 路由规则表</b>
+  • rule_name: 规则名称
+  • condition: 路由条件 (JSON)
+  • target_channel: 目标渠道
+  • priority: 优先级
+end note
+
+legend bottom right
+  <b>技术栈</b>
+  ════════════════════
+  • Spring Boot 2.7+
+  • Spring Cloud Alibaba
+  • MyBatis-Plus
+  • Redis (缓存+限流)
+  • Kafka (异步事件)
+  • Drools (规则引擎)
+  • Sentinel (限流熔断)
+  • Seata (分布式事务)
+  • Nacos (配置中心)
+  ════════════════════
+  <b>核心设计模式</b>
+  • 策略模式 (两层)
+  • 工厂模式
+  • 责任链模式
+  • 模板方法模式
+  • 适配器模式
+endlegend
+
+@enduml
+

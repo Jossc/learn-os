@@ -1,0 +1,166 @@
+@startuml 弹窗抽奖系统交互时序图
+
+title 弹窗抽 - 完整交互流程
+
+actor 用户 as User
+participant 前端应用 as Frontend
+participant 抽奖控制器 as Controller
+participant 弹窗抽奖服务 as LotteryService
+participant 活动服务 as ActivityService
+participant 用户服务 as UserService
+participant Redis缓存 as Redis
+participant 数据库 as DB
+participant 优惠券服务 as CouponService
+
+== 1. 用户启动应用检查弹窗 ==
+
+User -> Frontend: 启动应用
+Frontend -> Controller: GET /api/front/lottery/current-activity
+Controller -> LotteryService: getCurrentActivity()
+LotteryService -> DB: 查询当前有效活动
+DB --> LotteryService: 返回活动信息
+LotteryService --> Controller: 返回活动ID
+Controller --> Frontend: 返回活动详情
+
+alt 有活动进行中
+    Frontend -> Controller: GET /api/front/lottery/popup/check?activityId=123
+    Controller -> UserService: getInfo().getId()
+    UserService --> Controller: 返回用户ID
+    Controller -> LotteryService: shouldShowPopup(userId)
+
+    note right of LotteryService: 检查弹窗规则\n1. 11-01、11-11、12-12\n2. 每周五\n3. 今日是否已弹窗
+
+    LotteryService -> DB: 查询用户今日弹窗记录
+    DB --> LotteryService: 返回弹窗状态
+    LotteryService --> Controller: 返回是否需要弹窗
+
+    Controller -> LotteryService: hasLotteryToday(userId, activityId)
+    LotteryService -> DB: 查询用户今日抽奖记录
+    DB --> LotteryService: 返回抽奖状态
+    LotteryService --> Controller: 返回是否已抽奖
+
+    Controller -> ActivityService: getById(activityId)
+    ActivityService -> DB: 查询活动详情
+    DB --> ActivityService: 返回活动信息
+    ActivityService --> Controller: 返回活动详情
+
+    Controller --> Frontend: 返回弹窗状态信息
+
+    alt 需要弹窗且未抽奖
+        Frontend -> User: 显示抽奖弹窗
+        User -> Frontend: 点击抽奖按钮
+
+        == 2. 记录弹窗展示 ==
+        Frontend -> Controller: POST /api/front/lottery/popup/record
+        Controller -> UserService: getInfo().getId()
+        UserService --> Controller: 返回用户ID
+        Controller -> LotteryService: recordPopup(userId)
+        LotteryService -> DB: 插入弹窗记录
+        DB --> LotteryService: 记录成功
+        LotteryService --> Controller: 返回成功
+        Controller --> Frontend: 返回记录成功
+
+        == 3. 执行抽奖 ==
+        Frontend -> Controller: POST /api/front/lottery/draw?activityId=123
+        Controller -> UserService: getInfo().getId()
+        UserService --> Controller: 返回用户ID
+
+        Controller -> LotteryService: getCurrentActivity()
+        LotteryService --> Controller: 返回活动ID
+
+        Controller -> LotteryService: hasLotteryToday(userId, activityId)
+        LotteryService -> DB: 检查今日抽奖记录
+        DB --> LotteryService: 返回抽奖状态
+        LotteryService --> Controller: 未抽奖
+
+        Controller -> LotteryService: doLottery(userId, activityId)
+
+        note right of LotteryService: 高并发控制\n使用Redis分布式锁
+
+        LotteryService -> Redis: 尝试获取分布式锁
+        Redis --> LotteryService: 获取锁成功
+
+        LotteryService -> LotteryService: getAvailablePrizes(userId, activityId)
+        LotteryService -> DB: 查询活动奖品列表
+        DB --> LotteryService: 返回奖品列表
+        LotteryService -> DB: 查询用户抽奖轮次记录
+        DB --> LotteryService: 返回已中奖品
+
+        note right of LotteryService: 不重复中奖逻辑\n过滤已中奖品\n如果全中完则重置轮次
+
+        LotteryService -> LotteryService: 随机选择奖品(100%中奖)
+
+        LotteryService -> DB: 插入抽奖记录
+        DB --> LotteryService: 插入成功
+
+        LotteryService -> DB: 更新用户抽奖轮次
+        DB --> LotteryService: 更新成功
+
+        LotteryService -> CouponService: issueCouponToUser(userId, couponId)
+
+        note right of CouponService: 发放优惠券\n有效期到当日23:59:59
+
+        CouponService -> DB: 发放优惠券
+        DB --> CouponService: 发放成功
+        CouponService --> LotteryService: 优惠券发放成功
+
+        LotteryService -> Redis: 释放分布式锁
+        Redis --> LotteryService: 释放成功
+
+        LotteryService --> Controller: 返回中奖结果
+        Controller --> Frontend: 返回抽奖结果
+        Frontend -> User: 显示中奖信息
+
+    else 今日已抽奖
+        Frontend -> User: 提示今日已抽奖
+    end
+
+else 无活动进行中
+    Frontend -> User: 不显示弹窗
+end
+
+== 4. 查看抽奖记录 ==
+
+User -> Frontend: 查看抽奖记录
+Frontend -> Controller: GET /api/front/lottery/records?activityId=123
+Controller -> UserService: getInfo().getId()
+UserService --> Controller: 返回用户ID
+Controller -> LotteryService: getUserLotteryRecords(userId)
+LotteryService -> DB: 查询用户抽奖记录
+DB --> LotteryService: 返回抽奖记录列表
+LotteryService --> Controller: 返回记录列表
+Controller --> Frontend: 返回格式化记录
+Frontend -> User: 显示抽奖历史
+
+== 5. 管理后台活动配置 ==
+
+participant 管理员 as Admin
+participant 管理后台 as AdminFrontend
+participant 管理控制器 as AdminController
+
+Admin -> AdminFrontend: 配置抽奖活动
+AdminFrontend -> AdminController: POST /api/admin/lottery/activity/create
+AdminController -> ActivityService: createActivity(activity, prizes)
+ActivityService -> DB: 创建活动和奖品
+DB --> ActivityService: 创建成功
+ActivityService --> AdminController: 返回活动ID
+AdminController --> AdminFrontend: 返回创建结果
+AdminFrontend -> Admin: 显示创建成功
+
+== 6. 定时任务处理 ==
+
+participant 定时任务 as ScheduledTask
+
+note over ScheduledTask: 每日凌晨00:00执行
+ScheduledTask -> Redis: 清理每日缓存
+Redis --> ScheduledTask: 清理完成
+
+note over ScheduledTask: 每小时执行
+ScheduledTask -> LotteryService: getCurrentActivity()
+LotteryService -> DB: 查询当前活动
+DB --> LotteryService: 返回活动信息
+LotteryService --> ScheduledTask: 返回活动ID
+ScheduledTask -> Redis: 刷新活动缓存
+Redis --> ScheduledTask: 缓存更新完成
+
+@enduml

@@ -1,0 +1,115 @@
+@startuml skywalking-spring-business-plugin-structure
+!define RECTANGLE class
+
+package "skywalking-spring-business-plugin" {
+
+    package "src/main/java/com/monitor/plugin" {
+
+        package "config" {
+            RECTANGLE SpringBeanInterceptorAdvisor {
+                + registerInterceptors()
+                + configureSpringAOP()
+                + adaptToSpringContext()
+            }
+        }
+
+        package "interceptor" {
+            RECTANGLE ConsultMetricsInterceptor {
+                + beforeMethod()
+                + afterMethod()
+                + handleException()
+                - recordConsultMetrics()
+            }
+
+            RECTANGLE PrescriptionMetricsInterceptor {
+                + beforeMethod()
+                + afterMethod()
+                + handleException()
+                - recordPrescriptionMetrics()
+            }
+
+            RECTANGLE OrderMetricsInterceptor {
+                + beforeMethod()
+                + afterMethod()
+                + handleException()
+                - recordOrderMetrics()
+            }
+
+            RECTANGLE WorkorderMetricsInterceptor {
+                + beforeMethod()
+                + afterMethod()
+                + handleException()
+                - recordWorkorderMetrics()
+            }
+        }
+
+        package "metric" {
+            RECTANGLE BusinessMetricRegistry {
+                + registerCounter()
+                + registerGauge()
+                + registerHistogram()
+                + getMetricService()
+                - skyWalkingMeterService
+            }
+
+            RECTANGLE MetricConstants {
+                + CONSULT_PREFIX
+                + PRESCRIPTION_PREFIX
+                + ORDER_PREFIX
+                + WORKORDER_PREFIX
+                + METRIC_UNITS
+            }
+        }
+
+        package "plugin" {
+            RECTANGLE BusinessPluginDefine {
+                + enhanceClass()
+                + getInstanceMethodsInterceptPoints()
+                + getConstructorsInterceptPoints()
+            }
+
+            RECTANGLE BusinessBootService {
+                + prepare()
+                + boot()
+                + onComplete()
+                + shutdown()
+                - initializeMetrics()
+            }
+        }
+    }
+
+    package "src/main/resources/META-INF/services" {
+        file "org.apache.skywalking.apm.agent.core.plugin.PluginDefine" as PluginSPI
+    }
+
+    file "pom.xml" as POM
+}
+
+' 关系定义
+SpringBeanInterceptorAdvisor --> ConsultMetricsInterceptor : registers
+SpringBeanInterceptorAdvisor --> PrescriptionMetricsInterceptor : registers
+SpringBeanInterceptorAdvisor --> OrderMetricsInterceptor : registers
+SpringBeanInterceptorAdvisor --> WorkorderMetricsInterceptor : registers
+
+ConsultMetricsInterceptor --> BusinessMetricRegistry : uses
+PrescriptionMetricsInterceptor --> BusinessMetricRegistry : uses
+OrderMetricsInterceptor --> BusinessMetricRegistry : uses
+WorkorderMetricsInterceptor --> BusinessMetricRegistry : uses
+
+BusinessMetricRegistry --> MetricConstants : uses
+BusinessPluginDefine --> SpringBeanInterceptorAdvisor : configures
+BusinessBootService --> BusinessMetricRegistry : initializes
+
+PluginSPI --> BusinessPluginDefine : registers
+
+note right of BusinessMetricRegistry
+  基于SkyWalking MeterService
+  提供指标注册和管理
+end note
+
+note right of SpringBeanInterceptorAdvisor
+  适配Spring AOP框架
+  自动注册业务拦截器
+end note
+
+@enduml

@@ -1,0 +1,153 @@
+sequenceDiagram
+    participant Client as 客户端
+    participant Controller as OrderController
+    participant Service as FrontOrderService
+    participant UserService as 用户服务
+    participant RedisUtil as Redis缓存
+    participant ProductService as 商品服务
+    participant MerchantService as 商户服务
+    participant OrderService as 订单服务
+    participant CouponService as 优惠券服务
+    participant StockService as 库存服务
+    participant PaymentService as 支付服务
+    participant ThirdPartyAPI as 第三方API
+    participant AsyncService as 异步服务
+    participant DB as 数据库
+
+entryspacing 0.6
+    Client->>Controller: 创建订单请求(CreateOrderRequest)
+    Controller->>Service: createOrder(orderRequest)
+
+    Note over Service: 1. 用户身份验证
+    Service->>UserService: 获取用户信息
+    alt 有手机号
+        Service->>UserService: getByPhone(mobile)
+    else 无手机号
+        Service->>UserService: getInfo()
+    end
+    UserService-->>Service: 返回用户信息
+
+    Note over Service: 2. 获取预下单信息
+    Service->>RedisUtil: 检查预下单缓存
+    RedisUtil-->>Service: 返回预下单信息(PreOrderInfoVo)
+
+    Note over Service: 3. 处方药校验(如果包含)
+    alt 包含处方药
+        Service->>Service: checkOtcProduct()
+        Service-->>Service: 校验处方药合规性
+    end
+
+    Note over Service: 4. 特殊订单类型处理
+    alt 秒杀订单
+        Service->>Service: seckillService.createOrder()
+        Service-->>Client: 返回秒杀订单结果
+    end
+
+    Note over Service: 5. 地址验证
+    alt 需要收货地址
+        Service->>Service: 验证收货地址
+        Service->>MerchantService: 验证商户自提设置
+    end
+
+    Note over Service: 6. 库存校验
+    Service->>Service: validateProductStock()
+    Service->>ProductService: 校验商品库存
+    Service->>MerchantService: 校验商户状态
+    Service->>ThirdPartyAPI: 校验第三方库存(候鸟供应链)
+
+    Note over Service: 7. 运费计算
+    Service->>Service: getFreightFee()
+    Service->>Service: 计算各种运费规则
+
+    Note over Service: 8. 优惠券计算
+    Service->>CouponService: getCouponFee_V1_3()
+    Service->>CouponService: 验证优惠券可用性
+    Service->>Service: 计算优惠金额
+
+    Note over Service: 9. 积分处理
+    alt 使用积分
+        Service->>Service: integralDeductionComputed()
+    end
+    alt 使用签到积分
+        Service->>Service: useSignIntegral()
+    end
+
+    Note over Service: 10. 构建订单对象
+    Service->>Service: 创建Order对象
+    Service->>Service: 创建MerchantOrder列表
+    Service->>Service: 创建OrderDetail列表
+
+    Note over Service: 11. 事务处理开始
+    Service->>DB: transactionTemplate.execute()
+
+    Note over DB: 11.1 库存扣减
+    alt 普通商品
+        Service->>StockService: 扣减商品库存
+        Service->>StockService: 扣减SKU库存
+    else 云盘商品
+        Service->>StockService: 扣减云盘库存
+    else 卡密商品
+        Service->>StockService: 消费卡密
+    else 视频号商品
+        Service->>StockService: 扣减视频号库存
+    else 秒杀商品
+        Service->>StockService: 扣减秒杀库存
+    end
+
+    Note over DB: 11.2 订单数据保存
+    Service->>OrderService: 保存主订单
+    Service->>OrderService: 保存商户订单
+    Service->>OrderService: 保存订单详情
+    Service->>OrderService: 保存第三方关联订单
+
+    Note over DB: 11.3 第三方订单创建
+    Service->>ThirdPartyAPI: threePartyOrderCreation()
+    Service->>ThirdPartyAPI: 候鸟供应链订单创建
+
+    Note over DB: 11.4 用户资源扣减
+    alt 使用积分
+        Service->>UserService: 扣减用户积分
+        Service->>Service: 记录积分使用记录
+    end
+    alt 使用签到积分
+        Service->>UserService: 扣减签到积分
+        Service->>Service: 记录签到积分使用
+    end
+
+    Note over DB: 11.5 优惠券使用
+    Service->>CouponService: 标记优惠券已使用
+
+    Note over DB: 11.6 订单日志和清理
+    Service->>OrderService: 创建订单日志
+    Service->>Service: 清除购物车数据
+
+    DB-->>Service: 事务提交成功
+
+    Note over Service: 12. 后续异步处理
+    alt 第三方订单
+        Service->>AsyncService: 同步国寿数据
+    end
+
+    alt 权益卡处理
+        Service->>Service: notifyBenefitCount()
+        Service->>ThirdPartyAPI: 通知权益中心
+    end
+
+    Service->>RedisUtil: 删除预下单缓存
+
+    alt 处方订单
+        Service->>ThirdPartyAPI: 同步互联网医院
+    end
+
+    Note over Service: 13. 支付队列处理
+    alt 需要支付
+        Service->>RedisUtil: 加入自动取消队列
+    else 免费订单
+        Service->>AsyncService: 订单支付成功处理
+    end
+
+    Note over Service: 14. 药品信息推送
+    Service->>AsyncService: 推送药品信息
+
+    Service-->>Controller: 返回OrderNoResponse
+    Controller-->>Client: 返回订单创建结果

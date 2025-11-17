@@ -1,0 +1,315 @@
+@startuml 支付中台完整流程时序图
+!theme plain
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+
+title 支付中台完整流程 - 时序图
+
+actor 用户 as User
+participant "客户端" as Client
+participant "API Gateway" as Gateway
+participant "PayController" as Controller
+participant "PayServiceImpl" as Service
+participant "风控引擎\nRiskEngine" as RiskEngine
+participant "智能路由引擎\nRouteEngine" as RouteEngine
+participant "配置中心\nNacos" as ConfigCenter
+participant "ChannelStrategyFactory\n(第一层)" as ChannelFactory
+participant "ChannelStrategy" as ChannelStrategy
+participant "PaymentMethodStrategyFactory\n(第二层)" as MethodFactory
+participant "PaymentMethodStrategy" as MethodStrategy
+participant "第三方支付" as PaymentService
+participant "OrderService" as OrderService
+database "MySQL配置库" as ConfigDB
+database "Redis缓存" as Redis
+queue "Kafka" as Kafka
+
+== 1. 用户发起支付 ==
+User -> Client: 选择商品，点击支付
+Client -> Gateway: POST /api/payment/otherPayment\n{channelFrom, payChannel, orderNo, amount, code}
+activate Gateway
+Gateway -> Gateway: 认证鉴权 & 限流检查
+Gateway -> Controller: 转发请求
+activate Controller
+
+Controller -> Service: otherPayment(OrderPayRequest)
+activate Service
+
+== 2. 前置校验 ==
+Service -> Service: 校验用户登录状态
+Service -> OrderService: getById(orderId)
+activate OrderService
+OrderService -> ConfigDB: SELECT * FROM orders WHERE id = ?
+ConfigDB --> OrderService: Order对象
+OrderService --> Service: Order
+deactivate OrderService
+
+Service -> Service: 校验订单状态\n(是否取消/已支付)
+
+alt 订单已取消或已支付
+    Service --> Controller: 异常: 订单状态异常
+    Controller --> Gateway: 错误响应
+    Gateway --> Client: {"status": false, "message": "订单异常"}
+    Client --> User: 提示错误信息
+    [<-- Service
+end
+
+== 3. 风控检查 (新增) ==
+Service -> Service: buildRiskContext()\n构建风控上下文
+
+Service -> RiskEngine: evaluateRisk(riskContext)
+activate RiskEngine
+
+RiskEngine -> ConfigDB: 查询风控规则
+ConfigDB --> RiskEngine: risk_rule_config
+
+RiskEngine -> Redis: 检查黑名单
+Redis --> RiskEngine: 黑名单结果
+
+RiskEngine -> RiskEngine: 规则引擎评估\n- 交易金额检查\n- 交易频率检查\n- 用户行为分析\n- IP地域检查
+
+RiskEngine -> RiskEngine: 计算风险评分
+
+alt 高风险交易
+    RiskEngine --> Service: RiskResult{level=HIGH, reject=true}
+    Service -> Kafka: 发送风控事件
+    Service --> Controller: 异常: 交易风险过高
+    Controller --> Client: {"status": false, "message": "交易异常,请联系客服"}
+    [<-- Service
+else 中风险交易
+    RiskEngine --> Service: RiskResult{level=MEDIUM, needVerify=true}
+    Service -> Client: 需要二次验证(短信验证码)
+    note right: 可以要求用户进行\n额外的身份验证
+else 低风险交易
+    RiskEngine --> Service: RiskResult{level=LOW, pass=true}
+    note right: 继续支付流程
+end
+
+deactivate RiskEngine
+
+Service -> Kafka: 发送风控评估事件
+activate Kafka
+Kafka --> Service: ACK
+deactivate Kafka
+
+== 4. 智能路由选择 (新增) ==
+Service -> RouteEngine: selectBestChannel(amount, payChannel, userRegion)
+activate RouteEngine
+
+RouteEngine -> ConfigDB: 查询路由规则
+ConfigDB --> RouteEngine: route_rule_config
+
+RouteEngine -> Redis: 获取渠道健康状态
+Redis --> RouteEngine: channel_health_status
+
+RouteEngine -> RouteEngine: 执行路由策略\n- 成功率路由\n- 成本优化路由\n- 限额检查\n- 地域路由
+
+RouteEngine -> Redis: 检查渠道限流
+Redis --> RouteEngine: 限流状态
+
+RouteEngine -> RouteEngine: 综合评分选择最优渠道
+
+RouteEngine --> Service: RouteResult{channel="taiping", method="WX_LITE", reason="最高成功率"}
+deactivate RouteEngine
+
+note right of Service
+  <b>智能路由结果:</b>
+  推荐渠道: taiping
+  推荐方式: WX_LITE
+  路由原因: 该渠道成功率98%
+end note
+
+== 5. 构建支付上下文 ==
+Service -> Service: buildPaymentContext()\n创建PaymentContext对象\n包含订单、用户、路由信息
+
+== 6. 第一层策略：选择渠道 (数据库配置化) ==
+Service -> ChannelFactory: getChannel(channelFrom="taiping")
+activate ChannelFactory
+
+ChannelFactory -> Redis: 查询缓存
+Redis --> ChannelFactory: channelCache.get("taiping")
+
+alt 缓存命中
+    ChannelFactory --> Service: 返回TaipingChannelStrategy
+else 缓存未命中
+    ChannelFactory -> ConfigDB: 查询渠道配置
+    activate ConfigDB
+    ConfigDB --> ChannelFactory: channel_config\n{code="taiping", strategyClass="TaipingChannelStrategy", status=1}
+    deactivate ConfigDB
+
+    ChannelFactory -> ChannelFactory: 通过反射加载策略类\nClass.forName(strategyClass)
+
+    ChannelFactory -> Redis: 缓存策略对象
+    Redis --> ChannelFactory: OK
+
+    ChannelFactory --> Service: 返回TaipingChannelStrategy
+end
+
+deactivate ChannelFactory
+
+note right
+  <b>第一层策略完成</b>
+  channelFrom="taiping"
+  → TaipingChannelStrategy
+  (从数据库配置加载)
+end note
+
+== 7. 执行渠道策略 ==
+Service -> ChannelStrategy: execute(PaymentContext)
+activate ChannelStrategy
+
+== 8. 第二层策略：选择支付方式 (数据库配置化) ==
+ChannelStrategy -> MethodFactory: getMethod(payChannel="WX_LITE")
+activate MethodFactory
+
+MethodFactory -> Redis: 查询缓存
+Redis --> MethodFactory: methodCache.get("WX_LITE")
+
+alt 缓存命中
+    MethodFactory --> ChannelStrategy: 返回WechatLitePayStrategy
+else 缓存未命中
+    MethodFactory -> ConfigDB: 查询支付方式配置
+    activate ConfigDB
+    ConfigDB --> MethodFactory: payment_method_config\n{code="WX_LITE", strategyClass="WechatLitePayStrategy", status=1}
+    deactivate ConfigDB
+
+    MethodFactory -> MethodFactory: 通过反射加载策略类\nClass.forName(strategyClass)
+
+    MethodFactory -> Redis: 缓存策略对象
+    Redis --> MethodFactory: OK
+
+    MethodFactory --> ChannelStrategy: 返回WechatLitePayStrategy
+end
+
+deactivate MethodFactory
+
+note right
+  <b>第二层策略完成</b>
+  payChannel="WX_LITE"
+  → WechatLitePayStrategy
+  (从数据库配置加载)
+end note
+
+== 9. 执行支付 ==
+ChannelStrategy -> MethodStrategy: execute(PaymentContext)
+activate MethodStrategy
+
+MethodStrategy -> Redis: 幂等性检查\nSETNX payment:idempotent:{orderNo}
+Redis --> MethodStrategy: 1 (成功)
+
+alt 幂等性检查失败
+    Redis --> MethodStrategy: 0 (已存在)
+    MethodStrategy --> ChannelStrategy: 异常: 重复支付
+    note right: 防止重复支付
+end
+
+MethodStrategy -> PaymentService: 调用微信统一下单API v3
+activate PaymentService
+PaymentService --> MethodStrategy: WxPayUnifiedOrderV3Result
+deactivate PaymentService
+
+MethodStrategy -> MethodStrategy: response.setWxLitePayRequest(result)
+MethodStrategy -> MethodStrategy: response.setStatus(true)
+
+MethodStrategy --> ChannelStrategy: OrderPayResultResponse
+deactivate MethodStrategy
+
+== 10. 更新订单 ==
+ChannelStrategy -> OrderService: updateById(order)
+activate OrderService
+OrderService -> ConfigDB: UPDATE orders SET out_trade_no = ?, status = 'PAYING'
+ConfigDB --> OrderService: 更新成功
+OrderService --> ChannelStrategy: true
+deactivate OrderService
+
+ChannelStrategy -> Kafka: 发送支付创建事件
+activate Kafka
+Kafka --> ChannelStrategy: ACK
+deactivate Kafka
+
+ChannelStrategy --> Service: OrderPayResultResponse
+deactivate ChannelStrategy
+
+== 11. 返回支付结果 ==
+Service --> Controller: OrderPayResultResponse
+deactivate Service
+
+Controller --> Gateway: 成功响应
+deactivate Controller
+Gateway --> Client: {"status": true, "wxLitePayRequest": {...}}
+deactivate Gateway
+
+Client -> Client: 调起微信支付SDK\nwx.requestPayment(payParams)
+Client -> User: 微信支付界面
+
+User -> User: 输入密码完成支付
+
+== 12. 支付回调 (异步) ==
+PaymentService -> Gateway: POST /api/payment/callback\n支付结果通知
+activate Gateway
+Gateway -> Controller: 转发回调
+activate Controller
+Controller -> Service: handlePaymentCallback(callbackData)
+activate Service
+
+Service -> Service: 验证签名
+
+Service -> Redis: 防重检查\nSETNX callback:{out_trade_no}
+Redis --> Service: 成功
+
+Service -> OrderService: 更新订单状态为已支付
+activate OrderService
+OrderService -> ConfigDB: UPDATE orders SET status = 'PAID', pay_time = NOW()
+ConfigDB --> OrderService: 更新成功
+OrderService --> Service: true
+deactivate OrderService
+
+Service -> Kafka: 发送支付成功事件
+activate Kafka
+Kafka --> Service: ACK
+deactivate Kafka
+
+Service -> RouteEngine: 上报渠道成功率数据
+activate RouteEngine
+RouteEngine -> Redis: 更新渠道健康状态
+RouteEngine --> Service: 已记录
+deactivate RouteEngine
+
+Service --> Controller: 处理成功
+deactivate Service
+Controller --> Gateway: {"code": "SUCCESS"}
+deactivate Controller
+Gateway --> PaymentService: 成功响应
+deactivate Gateway
+
+note over User, Kafka
+  <b>支付中台核心能力总结:</b>
+
+  <b>1. 风控能力</b>
+  • 实时风险评估 (事前预防)
+  • 多维度规则引擎
+  • 黑名单/白名单
+  • 异常交易拦截
+
+  <b>2. 智能路由</b>
+  • 基于成功率的智能选择
+  • 成本优化路由
+  • 渠道健康检查
+  • 故障自动切换
+
+  <b>3. 两层策略模式 (数据库配置化)</b>
+  • 第一层: channelFrom → 渠道策略
+  • 第二层: payChannel → 支付方式策略
+  • 配置存储在MySQL
+  • 策略通过反射动态加载
+  • Redis缓存提升性能
+
+  <b>4. 可靠性保障</b>
+  • 幂等性控制 (防重复)
+  • 分布式事务 (Seata)
+  • 限流熔断 (Sentinel)
+  • 异步事件 (Kafka)
+  • 实时监控告警
+end note
+
+@enduml

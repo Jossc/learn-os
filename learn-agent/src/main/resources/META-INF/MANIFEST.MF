@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Premain-Class: com.cn.agent.BusinessMetricsAgent
+Agent-Class: com.cn.agent.BusinessMetricsAgent
+Can-Redefine-Classes: true
+Can-Retransform-Classes: true
+Boot-Class-Path:
+Created-By: Business Metrics Agent
+Implementation-Title: Business Metrics Monitoring Agent
+Implementation-Version: 1.0.0
+Implementation-Vendor: Architecture Team
+

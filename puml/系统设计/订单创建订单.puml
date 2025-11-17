@@ -1,0 +1,261 @@
+@startuml 订单创建流程时序图
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam sequence {
+    ArrowColor Black
+    ActorBorderColor Black
+    LifeLineBorderColor Black
+    LifeLineBackgroundColor #EEEEEE
+    ParticipantBorderColor Black
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantFontName Microsoft YaHei
+    ParticipantFontSize 12
+    ActorFontName Microsoft YaHei
+    ActorFontSize 12
+    MessageFontName Microsoft YaHei
+    MessageFontSize 11
+}
+
+participant "客户端" as Client
+participant "OrderController" as Controller
+participant "FrontOrderService" as Service
+participant "用户服务" as UserService
+participant "Redis缓存" as RedisUtil
+participant "商品服务" as ProductService
+participant "商户服务" as MerchantService
+participant "订单服务" as OrderService
+participant "优惠券服务" as CouponService
+participant "库存服务" as StockService
+participant "支付服务" as PaymentService
+participant "第三方API" as ThirdPartyAPI
+participant "异步服务" as AsyncService
+participant "数据库" as DB
+
+activate Client
+Client -> Controller: 创建订单请求(CreateOrderRequest)
+activate Controller
+
+Controller -> Service: createOrder(orderRequest)
+activate Service
+
+== 1. 用户身份验证 ==
+Service -> UserService: 获取用户信息
+activate UserService
+
+alt 有手机号
+    Service -> UserService: getByPhone(mobile)
+    UserService --> Service: 返回用户信息
+else 无手机号
+    Service -> UserService: getInfo()
+    UserService --> Service: 返回用户信息
+end
+deactivate UserService
+
+== 2. 获取预下单信息 ==
+Service -> RedisUtil: 检查预下单缓存
+activate RedisUtil
+RedisUtil --> Service: 返回预下单信息(PreOrderInfoVo)
+deactivate RedisUtil
+
+== 3. 处方药校验 ==
+opt 包含处方药
+    Service -> Service: checkOtcProduct()
+    Note right: 校验处方药合规性
+end
+
+== 4. 特殊订单类型处理 ==
+opt 秒杀订单
+    Service -> Service: seckillService.createOrder()
+    Service --> Client: 返回秒杀订单结果
+end
+
+== 5. 地址验证 ==
+opt 需要收货地址
+    Service -> Service: 验证收货地址
+    Service -> MerchantService: 验证商户自提设置
+    activate MerchantService
+    MerchantService --> Service: 验证结果
+    deactivate MerchantService
+end
+
+== 6. 库存校验 ==
+Service -> Service: validateProductStock()
+Service -> ProductService: 校验商品库存
+activate ProductService
+ProductService --> Service: 库存校验结果
+deactivate ProductService
+
+Service -> MerchantService: 校验商户状态
+activate MerchantService
+MerchantService --> Service: 商户状态
+deactivate MerchantService
+
+Service -> ThirdPartyAPI: 校验第三方库存(候鸟供应链)
+activate ThirdPartyAPI
+ThirdPartyAPI --> Service: 第三方库存状态
+deactivate ThirdPartyAPI
+
+== 7. 运费计算 ==
+Service -> Service: getFreightFee()
+Note right: 计算各种运费规则
+
+== 8. 优惠券计算 ==
+Service -> CouponService: getCouponFee_V1_3()
+activate CouponService
+Service -> CouponService: 验证优惠券可用性
+CouponService --> Service: 优惠金额计算结果
+deactivate CouponService
+
+== 9. 积分处理 ==
+opt 使用积分
+    Service -> Service: integralDeductionComputed()
+end
+
+opt 使用签到积分
+    Service -> Service: useSignIntegral()
+end
+
+== 10. 构建订单对象 ==
+Service -> Service: 创建Order对象
+Service -> Service: 创建MerchantOrder列表
+Service -> Service: 创建OrderDetail列表
+
+== 11. 数据库事务处理 ==
+Service -> DB: transactionTemplate.execute()
+activate DB
+
+group 事务内操作
+    === 11.1 库存扣减 ===
+    alt 普通商品
+        Service -> StockService: 扣减商品库存
+        activate StockService
+        Service -> StockService: 扣减SKU库存
+        StockService --> Service: 扣减结果
+        deactivate StockService
+    else 云盘商品
+        Service -> StockService: 扣减云盘库存
+        activate StockService
+        StockService --> Service: 扣减结果
+        deactivate StockService
+    else 卡密商品
+        Service -> StockService: 消费卡密
+        activate StockService
+        StockService --> Service: 消费结果
+        deactivate StockService
+    else 视频号商品
+        Service -> StockService: 扣减视频号库存
+        activate StockService
+        StockService --> Service: 扣减结果
+        deactivate StockService
+    else 秒杀商品
+        Service -> StockService: 扣减秒杀库存
+        activate StockService
+        StockService --> Service: 扣减结果
+        deactivate StockService
+    end
+
+    === 11.2 订单数据保存 ===
+    Service -> OrderService: 保存主订单
+    activate OrderService
+    Service -> OrderService: 保存商户订单
+    Service -> OrderService: 保存订单详情
+    Service -> OrderService: 保存第三方关联订单
+    OrderService --> Service: 保存成功
+    deactivate OrderService
+
+    === 11.3 第三方订单创建 ===
+    Service -> ThirdPartyAPI: threePartyOrderCreation()
+    activate ThirdPartyAPI
+    Service -> ThirdPartyAPI: 候鸟供应链订单创建
+    ThirdPartyAPI --> Service: 创建成功
+    deactivate ThirdPartyAPI
+
+    === 11.4 用户资源扣减 ===
+    opt 使用积分
+        Service -> UserService: 扣减用户积分
+        activate UserService
+        Service -> Service: 记录积分使用记录
+        UserService --> Service: 扣减成功
+        deactivate UserService
+    end
+
+    opt 使用签到积分
+        Service -> UserService: 扣减签到积分
+        activate UserService
+        Service -> Service: 记录签到积分使用
+        UserService --> Service: 扣减成功
+        deactivate UserService
+    end
+
+    === 11.5 优惠券使用 ===
+    Service -> CouponService: 标记优惠券已使用
+    activate CouponService
+    CouponService --> Service: 标记成功
+    deactivate CouponService
+
+    === 11.6 订单日志和清理 ===
+    Service -> OrderService: 创建订单日志
+    activate OrderService
+    Service -> Service: 清除购物车数据
+    OrderService --> Service: 日志创建成功
+    deactivate OrderService
+end
+
+DB --> Service: 事务提交成功
+deactivate DB
+
+== 12. 后续异步处理 ==
+opt 第三方订单
+    Service -> AsyncService: 同步国寿数据
+    activate AsyncService
+    AsyncService --> Service: 同步完成
+    deactivate AsyncService
+end
+
+opt 权益卡处理
+    Service -> Service: notifyBenefitCount()
+    Service -> ThirdPartyAPI: 通知权益中心
+    activate ThirdPartyAPI
+    ThirdPartyAPI --> Service: 通知完成
+    deactivate ThirdPartyAPI
+end
+
+Service -> RedisUtil: 删除预下单缓存
+activate RedisUtil
+RedisUtil --> Service: 删除完成
+deactivate RedisUtil
+
+opt 处方订单
+    Service -> ThirdPartyAPI: 同步互联网医院
+    activate ThirdPartyAPI
+    ThirdPartyAPI --> Service: 同步完成
+    deactivate ThirdPartyAPI
+end
+
+== 13. 支付队列处理 ==
+alt 需要支付
+    Service -> RedisUtil: 加入自动取消队列
+    activate RedisUtil
+    RedisUtil --> Service: 加入成功
+    deactivate RedisUtil
+else 免费订单
+    Service -> AsyncService: 订单支付成功处理
+    activate AsyncService
+    AsyncService --> Service: 处理完成
+    deactivate AsyncService
+end
+
+== 14. 药品信息推送 ==
+Service -> AsyncService: 推送药品信息
+activate AsyncService
+AsyncService --> Service: 推送完成
+deactivate AsyncService
+
+Service --> Controller: 返回OrderNoResponse
+deactivate Service
+
+Controller --> Client: 返回订单创建结果
+deactivate Controller
+deactivate Client
+
+@enduml

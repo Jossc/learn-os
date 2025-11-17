@@ -1,0 +1,66 @@
+@startuml
+
+autonumber
+
+doc->cloudHosServer: 推送极速问诊订单,医生开始接诊 入参是 ProReceive 这个是接诊 表 pro_receive \n @Lock4j(keys = {"#proReceive.regId"}, expire = 3000, acquireTimeout = 1000) 这里使用锁了 regId
+cloudHosServer->cloudHosServer: searchDocInfoByInfo 查询医生信息, \n 联查3个表  dic_doctor dic_dept_doctor dic_dept
+cloudHosServer->cloudHosServer: 查询订单信息, pro_register 里边 regId
+alt 如果pro_register 缴费业务订单的状态是0
+    cloudHosServer->cloudHosServer: 丢出异常  患者已取消，不可接诊
+end
+cloudHosServer-> cloudHosServer: getPatientUserByPatientId 查询患者信息,这里查主要获取了用户的手机号
+
+alt 根据reg_id 查询 pro_receive 如果存在
+    cloudHosServer->cloudHosServer: 该号已接诊,不可重复接诊
+end
+cloudHosServer->cloudHosServer: 组装接诊信息
+cloudHosServer->cloudHosServer: 保存接诊信息 saveProReceive 存入 pro_receive
+cloudHosServer->cloudHosServer: updateRegisterStatus 修改挂号记录 pro_register  status 修改为4 接诊中
+cloudHosServer->orderServer: 修改订单信息 传入 医生id docId、regId pro_receive 里边的挂号id
+
+alt  如果是 购药补方类型
+cloudHosServer->cloudHosServer: 查询患者信息 转成JSON
+cloudHosServer->redis : redis.opsForList().range(key, 0, -1); 从redis 里边获取患者的处方信息
+cloudHosServer->cloudHosServer: 将redis中的处方信息转换为同步所需的格式，添加到list中
+cloudHosServer->crmebFron:  把处方信息同步给商城
+end
+cloudHosServer->cloudHosServer: 保存好友关系 sys_user_relation
+alt sys_user_relation 先查询医生和用户的关系是否存在
+    cloudHosServer->cloudHosServer:创建好友关系  sys_user_relation
+else
+    cloudHosServer->cloudHosServer:  这里更新了 sys_user_relation 的更新时间
+end
+
+alt 中医视频 VIDEO_CONSULTATION
+    cloudHosServer->cloudHosServer: 发送短信
+else alt : 定向视频问诊 (TARGETED_VIDEO) 和 报告解读 (REPORT_INTERPRETATION):
+    cloudHosServer->cloudHosServer: 调用 basicFeign.sendCustom 方法发送短信通知
+    cloudHosServer->cloudHosServer: 发送 TencentUtil 方法更新腾讯云群组信息
+    cloudHosServer->cloudHosServer: 发送sendRabbitDelayMessage 延迟队列  five.minutes.send.to.patient
+    cloudHosServer->cloudHosServer: synMall 从redis 或数据库中获取患者的问诊卡信息、处理疾病图片下载并更新图片 URL、\n 构建环信消息并发送、发送腾讯IM群组消息、构建并发送问诊信息到商城系统、\n 根据问诊类型TARGETED_VIDEO、REPORT_INTERPRETATION 这两种问诊 同步问诊信息到工作订单系统
+
+else alt: ONLINE_DIAGNOSIS 定向图文
+    cloudHosServer->cloudHosServer: 执行synMall
+
+else alt: FAST_VIDEO 快速问诊
+    cloudHosServer->redis: redisTemplate 从redis 中获取排队中的患者列表
+    cloudHosServer->cloudHosServer: 如果当前换着是队列的第一个并且 队列里边有其他患者, 那就发短信通下一个患者
+    cloudHosServer->redis: 删除当前患者的排队记录
+    cloudHosServer->redis: 删除Redis 中的患者排队记录
+ end
+ cloudHosServer->app: 发送欢迎语 这里发的是环信消息
+ cloudHosServer->redis : 删除挂号等待记录
+ cloudHosServer->cloudHosServer: 构建环信消息,并发送延迟消息 five.minutes.send.to.patient 这里是医生给用户发送消息
+
+cloudHosServer->redis : 根据 third:reg:id 跳转三方的id + 挂号id 从redis 里边获取数据
+note left
+    redis 中存放的信息为:
+                messageParams.put("regId", registerInfoVO.getReg().getRegId()); 挂号id
+                messageParams.put("status", "not_receive"); 状态
+                messageParams.put("rightId", dto.getRightId()); 权益id
+                messageParams.put("productId", dto.getProductId()); 产品id
+                messageParams.put("channelCode", dicPatientUser.getChannelTypeCode()); 渠道
+end note
+cloudHosServer->cloudHosServer: 更新状态  status 为 receive
+
+@enduml

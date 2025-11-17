@@ -1,0 +1,416 @@
+@startuml 完整支付流程时序图
+
+title 完整的支付策略模式流程 - 从初始化到执行
+
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+autonumber
+
+box "应用启动阶段" #LightBlue
+participant "Spring容器" as Spring
+end box
+
+box "策略工厂" #LightYellow
+participant "ChannelPaymentStrategyFactory" as Factory
+participant "strategyCache\n(Map)" as Cache
+end box
+
+box "支付策略实现" #LightGreen
+participant "AilianjkPaymentStrategy\n(优先级:1)" as AilianStrategy
+participant "TaipingChannelPaymentStrategy\n(优先级:2)" as TaipingStrategy
+participant "DefaultPaymentStrategy\n(优先级:MAX)" as DefaultStrategy
+end box
+
+box "业务服务层" #LightCyan
+participant "PayController" as Controller
+participant "PayServiceImpl" as PayService
+participant "OrderService" as OrderService
+participant "AilianjkPayService" as AilianPayService
+participant "WechatService" as WechatService
+end box
+
+box "客户端" #LightGray
+participant "客户端" as Client
+end box
+
+== 第一阶段: 应用启动 - 策略工厂初始化 ==
+
+Spring -> Factory: 依赖注入所有 ChannelPaymentStrategy 实现
+note right of Spring
+  strategies = List<ChannelPaymentStrategy>
+  包含所有策略实例:
+  - AilianjkPaymentStrategy
+  - TaipingChannelPaymentStrategy
+  - H5ChannelPaymentStrategy
+  - DefaultPaymentStrategy
+end note
+
+Spring -> Factory: @PostConstruct init()
+activate Factory
+
+Factory -> Factory: 检查 strategies 不为空
+
+Factory -> Factory: 对策略按优先级排序
+note right of Factory
+  Comparator.comparingInt(
+    ChannelPaymentStrategy::getOrder
+  )
+end note
+
+Factory -> AilianStrategy: getOrder()
+AilianStrategy --> Factory: 返回 1
+
+Factory -> TaipingStrategy: getOrder()
+TaipingStrategy --> Factory: 返回 2
+
+Factory -> DefaultStrategy: getOrder()
+DefaultStrategy --> Factory: 返回 Integer.MAX_VALUE
+
+Factory -> Factory: 保存排序结果到 sortedStrategies
+note right of Factory
+  sortedStrategies = [
+    AilianjkPaymentStrategy(1),
+    TaipingChannelPaymentStrategy(2),
+    DefaultPaymentStrategy(MAX)
+  ]
+end note
+
+Factory -> Factory: 日志: "开始初始化支付策略工厂，共X个策略"
+
+loop 遍历 sortedStrategies
+    Factory -> Factory: 日志: "注册支付策略: XXX, 优先级: X"
+end
+
+Factory -> Factory: 日志: "支付策略工厂初始化完成"
+deactivate Factory
+
+Factory --> Spring: 初始化完成
+
+note over Spring, DefaultStrategy
+  ✅ 策略工厂初始化完成，应用启动成功
+end note
+
+|||
+
+== 第二阶段: 用户发起支付请求 ==
+
+Client -> Controller: POST /api/payment/otherPayment
+note right of Client
+  请求参数:
+  {
+    "channelFrom": "ailianjkpay",
+    "payType": "ailianjkpay",
+    "payChannel": "WX_LITE",
+    "orderNo": "PT394176276179845336441",
+    "code": "0c38YLGa1y7WDK0bkJHKmFA",
+    "scene": 0
+  }
+end note
+
+Controller -> PayService: otherPayment(orderPayRequest)
+activate PayService
+
+PayService -> PayService: 日志: "其他支付 START otherPayment:{...}"
+
+PayService -> PayService: 获取当前用户ID
+alt 用户未登录
+    PayService --> Client: 抛出异常: "请先登录"
+end
+
+PayService -> OrderService: getByOrderNo(orderNo)
+OrderService --> PayService: 返回 Order 对象
+PayService -> PayService: 日志: "获取订单信息, orderNo:XXX, payType:XXX"
+
+PayService -> PayService: checkOrderAndBuildUser(orderPayRequest, order)
+note right of PayService
+  校验订单:
+  - 检查订单是否已取消
+  - 检查订单是否已支付
+  - 检查订单金额是否>0
+  - 构建用户信息
+end note
+
+alt 订单状态异常
+    PayService --> Client: 抛出异常
+end
+
+alt 有微信授权码
+    PayService -> WechatService: miniAuthCode(code)
+    activate WechatService
+    WechatService --> PayService: 返回 WeChatMiniAuthorizeVo (openId)
+    deactivate WechatService
+    PayService -> PayService: 日志: "获取微信小程序授权信息成功, openId:XXX"
+    PayService -> PayService: orderPayRequest.setOpenId(openId)
+end
+
+PayService -> PayService: 构建 PaymentContext
+note right of PayService
+  PaymentContext:
+  - setOrder(order)
+  - setUser(user)
+  - setPayRequest(orderPayRequest)
+  - setOpenId(openId)
+  - setUserId(userId)
+end note
+
+PayService -> PayService: 初始化 OrderPayResultResponse
+note right of PayService
+  response:
+  - orderNo
+  - payType
+  - payChannel
+end note
+
+|||
+
+== 第三阶段: 策略匹配 - 查找爱连接支付策略 ==
+
+PayService -> Factory: getStrategy("ailianjkpay")
+note right of PayService
+  使用 channelFrom = "ailianjkpay"
+  查找支付策略
+end note
+activate Factory
+
+Factory -> Factory: 检查 payType 不为空
+
+Factory -> Cache: get("ailianjkpay")
+Cache --> Factory: null (首次查询，缓存中没有)
+
+Factory -> Factory: findAndCacheStrategy("ailianjkpay")
+activate Factory
+
+Factory -> Factory: synchronized 同步块
+Factory -> Cache: 再次检查 get("ailianjkpay")
+Cache --> Factory: null
+
+Factory -> Factory: 获取 sortedStrategies (已按优先级排序)
+Factory -> Factory: 日志: "开始查找支付策略: payType=ailianjkpay, 策略总数=4"
+
+group #LightGreen 第1次循环: 检查 AilianjkPaymentStrategy (优先级:1)
+    Factory -> AilianStrategy: support("ailianjkpay")
+    activate AilianStrategy
+
+    AilianStrategy -> AilianStrategy: isSupported = PAY_TYPE_AILIANJK_PAY.equals("ailianjkpay")
+    note right of AilianStrategy
+      PAY_TYPE_AILIANJK_PAY = "ailianjkpay"
+      "ailianjkpay".equals("ailianjkpay") = true
+    end note
+
+    AilianStrategy -> AilianStrategy: 日志: "AilianjkPaymentStrategy.support 检查"
+    note right of AilianStrategy
+      payType=ailianjkpay
+      期望值=ailianjkpay
+      匹配结果=true ✅
+    end note
+
+    AilianStrategy --> Factory: 返回 true ✅
+    deactivate AilianStrategy
+
+    Factory -> Factory: 日志: "检查策略: AilianjkPaymentStrategy, 优先级: 1, 是否支持[ailianjkpay]: true"
+
+    Factory -> Factory: 🎯 匹配成功! 停止遍历
+    Factory -> Cache: put("ailianjkpay", AilianjkPaymentStrategy)
+    Factory -> Factory: 日志: "匹配成功! 缓存支付策略: payType=ailianjkpay, strategy=AilianjkPaymentStrategy"
+end
+
+note over Factory, DefaultStrategy
+  ⚠️ 因为已找到匹配策略，后续策略不会被检查:
+  - TaipingChannelPaymentStrategy (优先级:2)
+  - DefaultPaymentStrategy (优先级:MAX)
+end note
+
+Factory --> Factory: 返回 AilianjkPaymentStrategy
+deactivate Factory
+
+Factory --> PayService: 返回 AilianjkPaymentStrategy
+deactivate Factory
+
+PayService -> PayService: 日志: "使用支付策略: AilianjkPaymentStrategy, payType: ailianjkpay"
+
+|||
+
+== 第四阶段: 执行爱连接支付策略 ==
+
+PayService -> AilianStrategy: execute(context)
+activate AilianStrategy
+
+AilianStrategy -> AilianStrategy: 日志: "开始执行爱连接支付策略"
+AilianStrategy -> AilianStrategy: 从 context 获取 order, user, payRequest
+
+alt order.payType == "ailianjkpay"
+    AilianStrategy -> AilianStrategy: order.setPayType("twoclear")
+    note right of AilianStrategy
+      将支付类型设置为二清支付
+    end note
+
+    AilianStrategy -> AilianPayService: channelTwoClearPay(order, openId)
+    activate AilianPayService
+
+    AilianPayService -> AilianPayService: 构建二清支付请求参数
+    AilianPayService -> AilianPayService: 调用爱连接支付接口
+    note right of AilianPayService
+      请求爱连接支付平台:
+      - 订单信息
+      - 金额
+      - 用户openId
+      - 回调地址等
+    end note
+
+    AilianPayService --> AilianStrategy: 返回支付结果 JSON
+    note right of AilianPayService
+      {
+        "code": 200,
+        "payInfo": "wx://pay/xxx..."
+      }
+    end note
+    deactivate AilianPayService
+
+    AilianStrategy -> AilianStrategy: JSONObject.parseObject(clearPay)
+    AilianStrategy -> AilianStrategy: payInfo = jsonObject.getString("payInfo")
+    AilianStrategy -> AilianStrategy: response.setAilianjkTwoClearpayRequest(payInfo)
+    AilianStrategy -> AilianStrategy: order.setOutTradeNo(order.getOrderNo())
+
+    AilianStrategy -> OrderService: updateById(order)
+    activate OrderService
+    OrderService --> AilianStrategy: 更新成功
+    deactivate OrderService
+
+    AilianStrategy -> AilianStrategy: response.setStatus(true)
+    AilianStrategy -> AilianStrategy: 日志: "爱连接支付策略执行完成"
+else 其他支付类型
+    AilianStrategy -> AilianStrategy: 处理其他支付逻辑...
+end
+
+AilianStrategy --> PayService: 返回 OrderPayResultResponse
+note right of AilianStrategy
+  response:
+  {
+    "orderNo": "PT394176...",
+    "payType": "twoclear",
+    "payChannel": "WX_LITE",
+    "status": true,
+    "ailianjkTwoClearpayRequest": "wx://pay/..."
+  }
+end note
+deactivate AilianStrategy
+
+PayService -> PayService: 日志: "渠道支付 END, orderNo:XXX, status:true"
+
+PayService --> Controller: 返回 OrderPayResultResponse
+deactivate PayService
+
+Controller --> Client: HTTP 200 OK + JSON Response
+note right of Client
+  ✅ 支付请求成功
+  客户��拿到支付信息
+  可以调起微信支付
+end note
+
+|||
+
+== 第五阶段: 异常情况 - 未知支付类型走默认策略 ==
+
+note over Client, DefaultStrategy
+  假设场景: payType = "unknown_pay" (系统不支持的支付类型)
+end note
+
+Client -> Controller: POST /api/payment/otherPayment (payType: "unknown_pay")
+Controller -> PayService: otherPayment(orderPayRequest)
+activate PayService
+
+PayService -> PayService: ... 前置校验逻辑 ...
+
+PayService -> Factory: getStrategy("unknown_pay")
+activate Factory
+
+Factory -> Factory: findAndCacheStrategy("unknown_pay")
+Factory -> Factory: 日志: "开始查找支付策略: payType=unknown_pay, 策略总数=4"
+
+group #LightPink 第1次循环: AilianjkPaymentStrategy 不匹配
+    Factory -> AilianStrategy: support("unknown_pay")
+    activate AilianStrategy
+    AilianStrategy -> AilianStrategy: "ailianjkpay".equals("unknown_pay")
+    AilianStrategy --> Factory: 返回 false ❌
+    deactivate AilianStrategy
+    Factory -> Factory: 日志: "检查策略: AilianjkPaymentStrategy, 是否支持: false"
+end
+
+group #LightPink 第2次循环: TaipingChannelPaymentStrategy 不匹配
+    Factory -> TaipingStrategy: support("unknown_pay")
+    activate TaipingStrategy
+    TaipingStrategy -> TaipingStrategy: "taiping".equals("unknown_pay")
+    TaipingStrategy --> Factory: 返回 false ❌
+    deactivate TaipingStrategy
+    Factory -> Factory: 日志: "检查策略: TaipingChannelPaymentStrategy, 是否支持: false"
+end
+
+group #LightYellow 第3次循环: DefaultPaymentStrategy 兜底匹配
+    Factory -> DefaultStrategy: support("unknown_pay")
+    activate DefaultStrategy
+    DefaultStrategy -> DefaultStrategy: 直接返回 true (兜底策略)
+    note right of DefaultStrategy
+      DefaultPaymentStrategy
+      的 support() 方法
+      总是返回 true
+      作为兜底策略
+    end note
+    DefaultStrategy --> Factory: 返回 true ✅
+    deactivate DefaultStrategy
+
+    Factory -> Factory: 日志: "检查策略: DefaultPaymentStrategy, 是否支持: true"
+    Factory -> Factory: 匹配成功! 缓存并返回
+    Factory -> Cache: put("unknown_pay", DefaultPaymentStrategy)
+end
+
+Factory --> PayService: 返回 DefaultPaymentStrategy
+deactivate Factory
+
+PayService -> DefaultStrategy: execute(context)
+activate DefaultStrategy
+
+DefaultStrategy -> DefaultStrategy: 日志: "使用默认支付策略，支付类型未被其他策略处理: unknown_pay"
+note right of DefaultStrategy
+  默认策略只是记录日志
+  并返回失败状态
+  不执行实际的支付逻辑
+end note
+
+DefaultStrategy -> DefaultStrategy: response.setStatus(false)
+DefaultStrategy -> DefaultStrategy: 日志: "默认支付策略执行完成，返回失败状态"
+
+DefaultStrategy --> PayService: 返回 OrderPayResultResponse (status=false)
+deactivate DefaultStrategy
+
+PayService --> Controller: 返回失败结果
+deactivate PayService
+
+Controller --> Client: HTTP 200 OK (但 status=false)
+note right of Client
+  ❌ 不支持的支付类型
+  支付失败
+end note
+
+|||
+
+note over Spring, Client
+  ========================================
+  关键点总结:
+
+  1. **策略初始化**: 应用启动时按优先级排序所有策略
+
+  2. **策略缓存**: 首次查找后将结果缓存，提高性能
+  3. **策略匹配**: 按优先级从低到高遍历，第一个匹配的即返回
+  4. **爱连接支付**: 优先级=1，优先匹配到 "ailianjkpay"
+  5. **默认策略**: 优先级=MAX，作为兜底，匹配所有未处理的类型
+  6. **核心策略**:
+     - 保存排序后的策略列表 (sortedStrategies)
+     - 按优先级遍历，而不是随机顺序
+     - 第一个匹配成功后立即返回，不会走到默认策略
+  ========================================
+end note
+
+@enduml
+
+

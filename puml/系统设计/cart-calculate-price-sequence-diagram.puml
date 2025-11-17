@@ -1,0 +1,84 @@
+@startuml 购物车价格计算接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/cart/calculate/price 购物车价格计算接口执行时序图
+
+actor "前端用户" as Client
+participant "CartController" as Controller
+participant "CartPriceService" as CartPriceService
+participant "CartService" as CartService
+participant "CouponService" as CouponService
+participant "UserService" as UserService
+participant "ProductService" as ProductService
+participant "AddressService" as AddressService
+
+Client -> Controller: POST /api/front/cart/calculate/price\n{ids: [购物车ID列表]}
+activate Controller
+
+Controller -> CartPriceService: calculatePrice(ids)
+activate CartPriceService
+
+note over CartPriceService: 开始计算购物车价格
+
+CartPriceService -> CartService: 根据购物车ID获取购物车数据
+activate CartService
+CartService --> CartPriceService: 返回购物车商品列表
+deactivate CartService
+
+CartPriceService -> UserService: 获取当前用户信息
+activate UserService
+UserService --> CartPriceService: 返回用户信息
+deactivate UserService
+
+CartPriceService -> ProductService: 批量获取商品详情和规格
+activate ProductService
+ProductService --> CartPriceService: 返回商品信息
+deactivate ProductService
+
+CartPriceService -> AddressService: 获取用户默认收货地址
+activate AddressService
+AddressService --> CartPriceService: 返回默认地址信息
+deactivate AddressService
+
+CartPriceService -> CartPriceService: 计算商品总价
+note over CartPriceService: 商品原价 × 数量
+
+CartPriceService -> CartPriceService: 计算运费
+note over CartPriceService: 根据收货地址\n和商品重量计算运费
+
+CartPriceService -> CouponService: 获取可用优惠券列表
+activate CouponService
+CouponService --> CartPriceService: 返回可用优惠券
+deactivate CouponService
+
+CartPriceService -> CartPriceService: 计算优惠金额
+note over CartPriceService: 应用最优优惠券\n计算折扣金额
+
+CartPriceService -> CartPriceService: 计算最终支付金额
+note over CartPriceService: 商品总价 + 运费 - 优惠金额
+
+CartPriceService -> CartPriceService: 组装价格响应对象
+note over CartPriceService: CartPriceResponse包含:\n- 商品总价\n- 运费\n- 优惠金额\n- 最终支付价格\n- 可用优惠券列表
+
+CartPriceService --> Controller: 返回CartPriceResponse
+deactivate CartPriceService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回价格计算结果
+deactivate Controller
+
+note over Client
+返回的价格信息包含:
+- totalPrice: 商品总价
+- freightFee: 运费
+- couponFee: 优惠券优惠金额
+- payPrice: 最终支付金额
+- usableCoupons: 可用优惠券列表
+- priceGroup: 价格明细分组
+end note
+
+@enduml

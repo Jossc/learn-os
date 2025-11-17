@@ -1,0 +1,106 @@
+@startuml 创建订单接口时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title /api/front/order/create 创建订单接口执行时序图
+
+actor "前端用户" as Client
+participant "OrderController" as Controller
+participant "FrontOrderService" as OrderService
+participant "UserService" as UserService
+participant "ProductService" as ProductService
+participant "CartService" as CartService
+participant "CouponService" as CouponService
+participant "InventoryService" as InventoryService
+participant "OrderNoResponse" as Response
+
+box "事务处理" #LightYellow
+    participant "TransactionManager" as Transaction
+end box
+
+Client -> Controller: POST /api/front/order/create\n{preOrderNo, addressId, couponId, payType, etc.}
+activate Controller
+
+Controller -> OrderService: createOrder(CreateOrderRequest)
+activate OrderService
+
+note over OrderService: 开始创建订单流程
+
+OrderService -> Transaction: 开启事务
+activate Transaction
+
+OrderService -> OrderService: 验证预订单信息
+note over OrderService: 检查预订单有效性\n验证订单状态
+
+OrderService -> UserService: 获取用户信息
+activate UserService
+UserService --> OrderService: 返回用户详情
+deactivate UserService
+
+OrderService -> ProductService: 验证商品信息
+activate ProductService
+ProductService --> OrderService: 返回商品详情和规格
+deactivate ProductService
+
+OrderService -> InventoryService: 检查库存并预占库存
+activate InventoryService
+alt 库存不足
+    InventoryService --> OrderService: 抛出库存不足异常
+    OrderService -> Transaction: 回滚事务
+    Transaction --> Controller: 事务回滚
+else 库存充足
+    InventoryService --> OrderService: 预占库存成功
+    deactivate InventoryService
+end
+
+OrderService -> CouponService: 验证并使用优惠券
+activate CouponService
+CouponService --> OrderService: 优惠券使用成功
+deactivate CouponService
+
+OrderService -> OrderService: 计算最终订单价格
+note over OrderService: 重新计算价格确保准确性
+
+OrderService -> OrderService: 创建主订单记录
+note over OrderService: 生成订单号\n保存订单基本信息
+
+OrderService -> OrderService: 创建子订单记录
+note over OrderService: 按商家拆分订单\n创建商家订单
+
+OrderService -> OrderService: 创建订单详情记录
+note over OrderService: 保存每个商品的详细信息
+
+OrderService -> CartService: 清空购物车
+activate CartService
+CartService --> OrderService: 购物车清空成功
+deactivate CartService
+
+OrderService -> OrderService: 生成订单号响应
+OrderService -> Response: 创建OrderNoResponse
+activate Response
+
+OrderService -> Transaction: 提交事务
+Transaction --> OrderService: 事务提交成功
+deactivate Transaction
+
+OrderService --> Controller: 返回OrderNoResponse
+deactivate Response
+deactivate OrderService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回订单创建结果
+deactivate Controller
+
+note over Client
+返回的创建订单结果包含:
+- orderNo: 主订单号
+- merchantOrderNos: 商家订单号列表
+- totalPrice: 订单总价
+- payPrice: 实际支付金额
+- createTime: 创建时间
+end note
+
+@enduml

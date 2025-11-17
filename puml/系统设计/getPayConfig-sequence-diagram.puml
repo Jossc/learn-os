@@ -1,0 +1,80 @@
+@startuml getPayConfig执行时序图
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam participantPadding 20
+skinparam boxPadding 10
+
+title getPayConfig方法执行时序图
+
+actor "前端用户" as Client
+participant "PayController" as Controller
+participant "PayServiceImpl" as PayService
+participant "SystemConfigService" as ConfigService
+participant "UserService" as UserService
+participant "PayConfigResponse" as Response
+
+Client -> Controller: GET /api/front/pay/get/config
+activate Controller
+
+Controller -> PayService: getPayConfig()
+activate PayService
+
+note over PayService: 开始获取支付配置信息
+
+PayService -> ConfigService: getValueByKey(CONFIG_PAY_WECHAT_OPEN)
+activate ConfigService
+ConfigService --> PayService: 返回微信支付开关状态
+deactivate ConfigService
+
+PayService -> ConfigService: getValueByKey(CONFIG_YUE_PAY_STATUS)
+activate ConfigService
+ConfigService --> PayService: 返回余额支付开关状态
+deactivate ConfigService
+
+PayService -> ConfigService: getValueByKey(CONFIG_ALI_PAY_STATUS)
+activate ConfigService
+ConfigService --> PayService: 返回支付宝支付开关状态
+deactivate ConfigService
+
+PayService -> ConfigService: getValueByKey(CONFIG_AILIANJK_PAY_STATUS)
+activate ConfigService
+ConfigService --> PayService: 返回支付管家开关状态
+deactivate ConfigService
+
+PayService -> Response: new PayConfigResponse()
+activate Response
+
+PayService -> Response: setYuePayStatus(yuePayStatus开关状态)
+PayService -> Response: setPayWechatOpen(微信支付开关状态)
+PayService -> Response: setAliPayStatus(支付宝开关状态)
+PayService -> Response: setAilianjkPayStatus(支付管家开关状态)
+
+alt 余额支付开关开启
+    PayService -> UserService: getInfo()
+    activate UserService
+    UserService --> PayService: 返回当前用户信息
+    deactivate UserService
+
+    PayService -> Response: setUserBalance(user.getNowMoney())
+    note right: 设置用户当前余额
+end
+
+PayService --> Controller: 返回PayConfigResponse
+deactivate Response
+deactivate PayService
+
+Controller -> Controller: CommonResult.success(response)
+Controller --> Client: 返回支付配置信息
+deactivate Controller
+
+note over Client
+返回的支付配置包含:
+- 余额支付状态: yuePayStatus
+- 微信支付状态: payWechatOpen
+- 支付宝支付状态: aliPayStatus
+- 支付管家状态: ailianjkPayStatus
+- 用户余额: userBalance (仅余额支付开启时)
+end note
+
+@enduml

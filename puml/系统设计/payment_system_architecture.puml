@@ -1,0 +1,122 @@
+@startuml 支付系统整体架构图
+
+!define RECTANGLE class
+
+title 支付系统 - 分层架构设计
+
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle rectangle
+
+package "前端交互层（用户端）" as FrontendLayer #E8F4FD {
+  [H5页面\n（支付选择/状态页）] as H5
+  [微信小程序\n（支付中转/状态页）] as WeChatMiniApp
+  [支付宝小程序\n（支付中转/状态页）] as AlipayMiniApp
+  [APP前端\n（支付页）] as MobileApp
+}
+
+package "接入层" as GatewayLayer #E8F8E8 {
+  [API网关\n（路由/协议转换）] as APIGateway
+  [安全防护\n（签名/HTTPS/鉴权）] as Security
+  [限流/熔断\n（保护系统稳定）] as RateLimit
+}
+
+package "核心服务层（微服务集群）" as CoreLayer #FFF2E8 {
+  [支付核心服务\n（订单生命周期）] as PaymentCore
+  [渠道路由服务\n（路由规则匹配）] as ChannelRouter
+  [渠道服务\n（爱连/微信/支付宝封装）] as ChannelService
+  [回调处理服务\n（结果校验/同步）] as CallbackService
+  [配置管理服务\n（支付方式/环境配置）] as ConfigService
+}
+
+package "数据层" as DataLayer #F0E8FF {
+  database "MySQL集群\n（支付订单/配置）" as MySQL
+  database "Redis缓存\n（热点数据/锁）" as Redis
+  queue "消息队列\n（异步通知/削峰）" as MessageQueue
+  database "日志存储\n（全链路日志）" as LogStorage
+}
+
+package "基础设施层" as InfraLayer #F5F5F5 {
+  [监控告警\n（指标/告警）] as Monitoring
+  [链路追踪\n（调用链分析）] as Tracing
+  [容器编排\n（K8s弹性扩缩）] as K8s
+  [容灾备份\n（多活/备份）] as Backup
+}
+
+package "外部支付渠道" as ExternalLayer #FFE8E8 {
+  [爱连支付] as AilianPay
+  [微信支付] as WeChatPay
+  [支付宝支付] as AlipayPay
+  [银联支付] as UnionPay
+}
+
+package "业务系统" as BusinessLayer #E8FFE8 {
+  [订单服务] as OrderService
+  [用户服务] as UserService
+  [商品服务] as ProductService
+  [营销服务] as MarketingService
+}
+
+' 前端层连接
+H5 --> APIGateway
+WeChatMiniApp --> APIGateway
+AlipayMiniApp --> APIGateway
+MobileApp --> APIGateway
+
+' 接入层内部连接
+APIGateway --> Security
+Security --> RateLimit
+
+' 接入层到核心层
+RateLimit --> PaymentCore
+RateLimit --> CallbackService
+
+' 核心层内部连接
+PaymentCore --> ChannelRouter
+ChannelRouter --> ChannelService
+PaymentCore --> ConfigService
+CallbackService --> PaymentCore
+
+' 核心层到数据层
+PaymentCore --> MySQL
+PaymentCore --> Redis
+ChannelService --> Redis
+CallbackService --> MessageQueue
+PaymentCore --> MessageQueue
+
+' 核心层到外部渠道
+ChannelService --> AilianPay
+ChannelService --> WeChatPay
+ChannelService --> AlipayPay
+ChannelService --> UnionPay
+
+' 外部渠道回调
+AilianPay --> CallbackService
+WeChatPay --> CallbackService
+AlipayPay --> CallbackService
+UnionPay --> CallbackService
+
+' 与业务系统集成
+MessageQueue --> OrderService
+MessageQueue --> UserService
+OrderService --> PaymentCore
+UserService --> PaymentCore
+
+' 基础设施监控
+InfraLayer -up-> CoreLayer : 监控
+InfraLayer -up-> DataLayer : 监控
+InfraLayer -up-> GatewayLayer : 监控
+
+' 日志收集
+CoreLayer --> LogStorage
+GatewayLayer --> LogStorage
+DataLayer --> LogStorage
+
+note top of FrontendLayer : 多端统一支付体验\n支持H5、小程序、APP
+note top of GatewayLayer : 统一接入点\n安全校验、流量控制
+note top of CoreLayer : 微服务架构\n高内聚低耦合
+note top of DataLayer : 数据持久化\n缓存加速、消息异步
+note top of InfraLayer : 运维保障\n监控、追踪、容灾
+note top of ExternalLayer : 多渠道支持\n降低单点风险
+note top of BusinessLayer : 业务解耦\n异步通知机制
+
+@enduml

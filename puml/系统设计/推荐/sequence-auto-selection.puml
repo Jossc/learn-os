@@ -1,0 +1,101 @@
+@startuml 自动策略选择时序图
+
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam backgroundColor #FFFFFF
+
+title 推荐系统 - 自动策略选择流程
+
+actor 用户 as user
+participant "Controller" as controller
+participant "StrategyFactory" as factory
+participant "Strategy1\n(Hybrid)" as strategy1
+participant "Strategy2\n(UserBasedCF)" as strategy2
+participant "Strategy3\n(Hot)" as strategy3
+database "Database" as db
+database "Redis" as redis
+
+user -> controller: 请求推荐\nGET /api/recommend
+activate controller
+
+controller -> factory: recommend(request)
+activate factory
+note right of factory
+    请求参数：
+    - userId: "user123"
+    - medicineType: "WESTERN"
+    - topN: 10
+    - enableFallback: true
+end note
+
+factory -> factory: 检查是否指定策略
+note right: strategyName == null\n需要自动选择
+
+factory -> factory: 获取所有策略并排序
+note right
+    按优先级排序：
+    1. Hybrid (5)
+    2. UserBasedCF (10)
+    3. ItemBasedCF (20)
+    4. ContentBased (30)
+    5. Hot (90)
+end note
+
+factory -> strategy1: isApplicable(request)
+activate strategy1
+strategy1 -> strategy1: 检查适用条件
+note right: 检查至少2个子策略可用
+strategy1 --> factory: return true
+deactivate strategy1
+
+factory -> factory: 选中Strategy1 (Hybrid)
+note right: 优先级最高且适用
+
+factory -> strategy1: recommend(request)
+activate strategy1
+
+strategy1 -> db: 查询用户相似度
+activate db
+db --> strategy1: 返回相似用户数据
+deactivate db
+
+strategy1 -> redis: 查询缓存数据
+activate redis
+redis --> strategy1: 返回缓存命中
+deactivate redis
+
+strategy1 -> strategy1: 执行推荐算法\n融合多个子策略
+note right
+    1. UserBasedCF: 40%
+    2. ItemBasedCF: 40%
+    3. ContentBased: 20%
+end note
+
+strategy1 --> factory: 返回推荐结果
+deactivate strategy1
+note left
+    返回数据：
+    - algorithm: "HYBRID"
+    - totalCount: 10
+    - recommendations: [...]
+end note
+
+factory -> factory: 检查结果是否为空
+note right: recommendations.size() > 0\n✓ 结果正常
+
+factory --> controller: 返回推荐响应
+deactivate factory
+
+controller --> user: 返回JSON结果
+deactivate controller
+
+note over user
+    展示推荐药品列表
+    - 药品图片
+    - 药品名称
+    - 推荐理由
+    - 相似度分数
+end note
+
+@enduml
+

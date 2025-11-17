@@ -1,0 +1,331 @@
+@startuml 支付系统类图(两层策略模式)
+!define LIGHTYELLOW #FFFACD
+!define LIGHTBLUE #E6F3FF
+!define LIGHTGREEN #E8F5E9
+!define LIGHTPINK #FFE6F0
+!define LIGHTORANGE #FFE5CC
+!define LIGHTPURPLE #E1BEE7
+
+skinparam classAttributeIconSize 0
+skinparam monochrome false
+skinparam shadowing false
+skinparam backgroundColor white
+
+title 支付系统架构 - 类图
+
+package "控制层 (Controller)" LIGHTYELLOW {
+    class PayController {
+        - PayService payService
+        --
+        + otherPayment(OrderPayRequest): Result<OrderPayResultResponse>
+        + payCallback(PaymentCallbackRequest): Result<Void>
+    }
+}
+
+package "服务层 (Service)" LIGHTBLUE {
+    class PayServiceImpl {
+        - OrderService orderService
+        - UserService userService
+        - WechatService wechatService
+        - ChannelStrategyFactory channelStrategyFactory
+        --
+        + otherPayment(OrderPayRequest): OrderPayResultResponse
+        - validateOrder(Order): void
+        - getOpenIdIfNeeded(String, String): String
+        - buildPaymentContext(Order, OrderPayRequest, String): PaymentContext
+    }
+
+    interface PayService {
+        + otherPayment(OrderPayRequest): OrderPayResultResponse
+    }
+
+    class WechatService {
+        + miniAuthCode(String): String
+        + createWxLiteOrder(String, BigDecimal, String, String): WxPayUnifiedOrderV3Result
+        + createWxH5Order(String, BigDecimal, String): WxPayUnifiedOrderV3Result
+        + createWxNativeOrder(String, BigDecimal, String): WxPayUnifiedOrderV3Result
+    }
+
+    class AlipayService {
+        + createH5Order(String, BigDecimal, String): AlipayTradeWapPayResponse
+        + createAppOrder(String, BigDecimal, String): AlipayTradeAppPayResponse
+    }
+
+    class AilianjkPayService {
+        + channelTwoClearPay(Order, String): String
+    }
+
+    class OrderService {
+        + getById(Long): Order
+        + updateById(Order): boolean
+        + createOrder(OrderCreateRequest): Order
+    }
+}
+
+package "第一层策略：渠道策略工厂" LIGHTGREEN {
+    class ChannelStrategyFactory {
+        - Map<String, ChannelStrategy> channelCache
+        - List<ChannelStrategy> sortedChannels
+        - List<ChannelStrategy> channels
+        --
+        + init(): void <<@PostConstruct>>
+        + getChannel(String channelFrom): ChannelStrategy
+        - findAndCacheChannel(String): ChannelStrategy
+    }
+}
+
+package "第一层策略：渠道策略实现" LIGHTPINK {
+    interface ChannelStrategy <<interface>> {
+        + {abstract} support(String channelFrom): boolean
+        + {abstract} execute(PaymentContext): OrderPayResultResponse
+        + {abstract} getOrder(): int
+    }
+
+    class AilianjkChannelStrategy {
+        - {static} CHANNEL_AILIANJK = "ailianjkpay"
+        - AilianjkPayService ailianjkPayService
+        - OrderService orderService
+        --
+        + getOrder(): int {return 1}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class TaipingChannelStrategy {
+        - {static} CHANNEL_TAIPING = "taiping"
+        - PaymentMethodStrategyFactory methodFactory
+        - OrderService orderService
+        --
+        + getOrder(): int {return 2}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class H5ChannelStrategy {
+        - {static} CHANNEL_H5 = "h5pay"
+        - PaymentMethodStrategyFactory methodFactory
+        - OrderService orderService
+        --
+        + getOrder(): int {return 3}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class DefaultChannelStrategy {
+        + getOrder(): int {return Integer.MAX_VALUE}
+        + support(String): boolean {return true}
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+}
+
+package "第二层策略：支付方式工厂" LIGHTORANGE {
+    class PaymentMethodStrategyFactory {
+        - Map<String, PaymentMethodStrategy> methodCache
+        - List<PaymentMethodStrategy> sortedMethods
+        - List<PaymentMethodStrategy> methods
+        --
+        + init(): void <<@PostConstruct>>
+        + getMethod(String payChannel): PaymentMethodStrategy
+        - findAndCacheMethod(String): PaymentMethodStrategy
+    }
+}
+
+package "第二层策略：支付方式实现" LIGHTPURPLE {
+    interface PaymentMethodStrategy <<interface>> {
+        + {abstract} support(String payChannel): boolean
+        + {abstract} execute(PaymentContext): OrderPayResultResponse
+        + {abstract} getOrder(): int
+    }
+
+    class WechatLitePayStrategy {
+        - {static} PAY_CHANNEL = "WX_LITE"
+        - WechatService wechatService
+        --
+        + getOrder(): int {return 10}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class WechatH5PayStrategy {
+        - {static} PAY_CHANNEL = "WX_H5"
+        - WechatService wechatService
+        --
+        + getOrder(): int {return 11}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class WechatNativePayStrategy {
+        - {static} PAY_CHANNEL = "WX_NATIVE"
+        - WechatService wechatService
+        --
+        + getOrder(): int {return 12}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class AlipayH5PayStrategy {
+        - {static} PAY_CHANNEL = "ALIPAY_H5"
+        - AlipayService alipayService
+        --
+        + getOrder(): int {return 20}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class AlipayAppPayStrategy {
+        - {static} PAY_CHANNEL = "ALIPAY_APP"
+        - AlipayService alipayService
+        --
+        + getOrder(): int {return 21}
+        + support(String): boolean
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+
+    class DefaultPaymentMethodStrategy {
+        + getOrder(): int {return Integer.MAX_VALUE}
+        + support(String): boolean {return true}
+        + execute(PaymentContext): OrderPayResultResponse
+    }
+}
+
+package "数据模型 (Model)" {
+    class PaymentContext {
+        - Order order
+        - User user
+        - OrderPayRequest payRequest
+        - String openId
+        - Long userId
+        - OrderPayResultResponse response
+        --
+        + builder(): PaymentContextBuilder
+    }
+
+    class OrderPayRequest {
+        - String channelFrom
+        - String payType
+        - String payChannel
+        - String orderNo
+        - String code
+        - Long userId
+    }
+
+    class OrderPayResultResponse {
+        - boolean status
+        - String message
+        - Object wxLitePayRequest
+        - Object wxH5PayRequest
+        - String alipayH5PayRequest
+        - String alipayAppPayRequest
+        - String ailianjkTwoClearpayRequest
+    }
+
+    class Order {
+        - Long id
+        - String orderNo
+        - String outTradeNo
+        - BigDecimal payPrice
+        - String productName
+        - String payType
+        - Integer status
+        - Long userId
+    }
+}
+
+' 第一层关系
+PayController --> PayService : uses
+PayServiceImpl ..|> PayService : implements
+PayServiceImpl --> ChannelStrategyFactory : uses
+PayServiceImpl --> OrderService : uses
+PayServiceImpl --> WechatService : uses
+
+ChannelStrategyFactory o--> ChannelStrategy : manages
+ChannelStrategyFactory ..> ChannelStrategy : creates
+
+ChannelStrategy <|.. AilianjkChannelStrategy : implements
+ChannelStrategy <|.. TaipingChannelStrategy : implements
+ChannelStrategy <|.. H5ChannelStrategy : implements
+ChannelStrategy <|.. DefaultChannelStrategy : implements
+
+AilianjkChannelStrategy --> AilianjkPayService : uses
+AilianjkChannelStrategy --> OrderService : uses
+
+' 第二层关系
+TaipingChannelStrategy --> PaymentMethodStrategyFactory : uses
+H5ChannelStrategy --> PaymentMethodStrategyFactory : uses
+
+PaymentMethodStrategyFactory o--> PaymentMethodStrategy : manages
+PaymentMethodStrategyFactory ..> PaymentMethodStrategy : creates
+
+PaymentMethodStrategy <|.. WechatLitePayStrategy : implements
+PaymentMethodStrategy <|.. WechatH5PayStrategy : implements
+PaymentMethodStrategy <|.. WechatNativePayStrategy : implements
+PaymentMethodStrategy <|.. AlipayH5PayStrategy : implements
+PaymentMethodStrategy <|.. AlipayAppPayStrategy : implements
+PaymentMethodStrategy <|.. DefaultPaymentMethodStrategy : implements
+
+WechatLitePayStrategy --> WechatService : uses
+WechatH5PayStrategy --> WechatService : uses
+WechatNativePayStrategy --> WechatService : uses
+AlipayH5PayStrategy --> AlipayService : uses
+AlipayAppPayStrategy --> AlipayService : uses
+
+' 数据模型关系
+PayServiceImpl ..> PaymentContext : creates
+ChannelStrategy ..> PaymentContext : uses
+PaymentMethodStrategy ..> PaymentContext : uses
+PayServiceImpl ..> OrderPayRequest : uses
+PayServiceImpl ..> OrderPayResultResponse : creates
+PaymentContext --> Order : contains
+PaymentContext --> OrderPayRequest : contains
+PaymentContext --> OrderPayResultResponse : contains
+
+note right of ChannelStrategyFactory
+  <b>第一层策略工厂 - 渠道选择</b>
+  • 根据 channelFrom 匹配渠道
+  • 支持：ailianjkpay、taiping、h5pay
+  • 使用缓存 + 优先级排序
+  • 双重检查锁保证线程安全
+end note
+
+note right of PaymentMethodStrategyFactory
+  <b>第二层策略工厂 - 支付方式选择</b>
+  • 根据 payChannel 匹配支付方式
+  • 支持：WX_LITE、WX_H5、ALIPAY_H5等
+  • 每种支付方式独立实现
+  • 易于扩展新的支付方式
+end note
+
+note bottom of ChannelStrategy
+  <b>渠道策略优先级:</b>
+  1. AilianjkChannelStrategy (优先级1)
+  2. TaipingChannelStrategy (优先级2)
+  3. H5ChannelStrategy (优先级3)
+  4. DefaultChannelStrategy (优先级MAX)
+end note
+
+note bottom of PaymentMethodStrategy
+  <b>支付方式优先级:</b>
+  微信系列: 10-19
+  • WX_LITE (10)
+  • WX_H5 (11)
+  • WX_NATIVE (12)
+
+  支付宝系列: 20-29
+  • ALIPAY_H5 (20)
+  • ALIPAY_APP (21)
+
+  默认: MAX
+end note
+
+note top of TaipingChannelStrategy
+  <b>两层策略调用:</b>
+  TaipingChannelStrategy.execute()
+  ↓
+  PaymentMethodStrategyFactory.getMethod(payChannel)
+  ↓
+  WechatLitePayStrategy.execute()
+  或 AlipayH5PayStrategy.execute()
+end note
+
+@enduml

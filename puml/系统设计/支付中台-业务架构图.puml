@@ -1,0 +1,260 @@
+@startuml 支付中台业务架构图
+
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #333333
+  BorderThickness 2
+  FontSize 12
+  FontName "Microsoft YaHei"
+}
+
+title <size:20><b>支付中台 - 业务架构图</b></size>\n<size:12>打造企业级统一支付能力平台</size>
+
+' ========================================
+' 第一层：业务系统层
+' ========================================
+package "业务系统" as BusinessSystems #FFF8DC {
+  rectangle "电商交易" #FFFACD
+  rectangle "广告营销" #FFFACD
+}
+
+' ========================================
+' 第二层：收银台层
+' ========================================
+package "收银台" as Cashier #FFE4E1 {
+  together {
+    rectangle "会员账户" #FFC0CB
+    rectangle "实名服务" #FFC0CB
+    rectangle "卡服务" #FFC0CB
+    rectangle "合约中心" #FFC0CB
+    rectangle "会员商户账单" #FFC0CB
+  }
+
+  rectangle "支付会员服务" as MemberService #FFB6C1
+
+  rectangle "API接入" as APIGateway #CD5C5C
+}
+
+' ========================================
+' 第三层：支付平台核心
+' ========================================
+package "支付平台" as PaymentPlatform #E6F3FF {
+
+  ' 左侧：支付风控
+  rectangle "支付风控" as PaymentRisk #B0E0E6 {
+    rectangle "授权鉴权" #87CEEB
+    rectangle "订单前置" #87CEEB
+    rectangle "订单操作" #87CEEB
+    rectangle "计费" #87CEEB
+    rectangle "商户通知" #87CEEB
+  }
+
+  ' 左侧：交易核心
+  rectangle "交易核心" as TransactionCore #B0E0E6
+
+  ' 中间：支付消费
+  rectangle "支付消费" as PaymentConsumer #B0E0E6 {
+    rectangle "支付编排" #87CEEB
+    rectangle "支付工具" #87CEEB
+    rectangle "差错处理" #87CEEB
+  }
+
+  ' 中间：支付核心
+  rectangle "支付核心" as PaymentCore #B0E0E6
+
+  ' 右侧：渠道网关
+  rectangle "渠道网关" as ChannelGateway #98FB98 {
+    rectangle "渠道订单" #90EE90
+    rectangle "网关前置" #90EE90
+  }
+
+  ' 右侧：渠道网关
+  rectangle "渠道网关" as ChannelGatewayBox #98FB98
+}
+
+' ========================================
+' 第四层：配置管理平台（左侧）和三方支付（右侧）
+' ========================================
+together {
+  package "配置管理平台" as ConfigPlatform #F0F8FF {
+    rectangle "分录登记" #D3D3D3
+    rectangle "日切汇总" #D3D3D3
+    rectangle "科目管理" #D3D3D3
+    rectangle "规则管理" #D3D3D3
+
+    rectangle "会计系统" as AccountingSystem #B0C4DE
+  }
+
+  package "三方支付资金平台" as ThirdPartyPayment #E6FFE6 {
+    rectangle "微信支付" #90EE90
+    rectangle "支付宝" #90EE90
+    rectangle "银联支付" #90EE90
+    rectangle "数字人民币" #90EE90
+    rectangle "其他渠道" #90EE90
+  }
+}
+
+' ========================================
+' 第五层：账务清算系统
+' ========================================
+package "账务清算系统" as SettlementSystem #FFF8DC {
+  rectangle "账务系统" as AccountSystem #B0E0E6 {
+    rectangle "同步记账" #87CEEB
+    rectangle "异步记账" #87CEEB
+    rectangle "异常补账" #87CEEB
+    rectangle "账户管理" #87CEEB
+  }
+
+  rectangle "清算系统" as ClearingSystem #AFEEEE {
+    rectangle "清算中心" #87CEEB
+    rectangle "内外对账" #87CEEB
+    rectangle "资金划拨" #87CEEB
+  }
+
+  rectangle "合规系统" as ComplianceSystem #FFB6C1 {
+    rectangle "报文归档" #FF69B4
+    rectangle "同步规则" #FF69B4
+    rectangle "合规校正" #FF69B4
+    rectangle "合规网关" #FF69B4
+  }
+}
+
+' ========================================
+' 第六层：对账系统
+' ========================================
+package "对账系统" as ReconciliationSystem #FFE4E1 {
+  rectangle "对账系统" #FFC0CB
+}
+
+' ========================================
+' 连接关系
+' ========================================
+
+' 第一层到第二层
+BusinessSystems -down-> Cashier : "API调用"
+
+' 第二层到第三层
+Cashier -down-> PaymentPlatform : "支付请求"
+
+' 第三层内部
+PaymentRisk -right-> PaymentConsumer
+PaymentConsumer -right-> ChannelGateway
+
+' 第三层到第四层
+ChannelGateway -down-> ThirdPartyPayment : "渠道调用"
+PaymentPlatform -down-> ConfigPlatform : "配置读取"
+
+' 第三层到第五层
+PaymentPlatform -down-> SettlementSystem : "账务记录"
+
+' 第五层到第六层
+SettlementSystem -down-> ReconciliationSystem : "对账数据"
+
+' ========================================
+' 核心能力标注
+' ========================================
+
+note right of PaymentCore
+  <b>支付核心能力</b>
+  ═══════════════════════
+  <b>两层策略路由模式</b>
+  • 第一层：渠道策略选择
+    - channelFrom参数
+    - 业务渠道路由
+
+  • 第二层：支付方式选择
+    - payChannel参数
+    - 支付方式路由
+
+  <b>核心功能</b>
+  • 智能路由引擎
+  • 支付编排
+  • 幂等与重试
+  • 渠道健康检查
+  • 自动故障切换
+end note
+
+note right of ChannelGateway
+  <b>渠道管理</b>
+  ═══════════
+  • 渠道配置中心
+  • 渠道健康检查
+  • 自动切换引擎
+  • 限流熔断
+  • 成功率监控
+  • 成本优化路由
+end note
+
+note left of ConfigPlatform
+  <b>配置管理</b>
+  ═══════════════════════
+  <b>核心配置表</b>
+  1. channel_config
+     （渠道配置表）
+  2. payment_method_config
+     （支付方式配置表）
+  3. route_rule_config
+     （路由规则表）
+  4. risk_rule_config
+     （风控规则表）
+  5. limit_config
+     （限额配置表）
+  6. channel_health_status
+     （渠道健康状态表）
+end note
+
+note right of ComplianceSystem
+  <b>合规监管</b>
+  ═══════════
+  • 实时合规校验
+  • 监管报送
+  • 操作审计
+  • 数据审计
+  • 日志追踪
+  • 性能监控
+  • 告警中心
+end note
+
+note left of PaymentRisk
+  <b>风控能力</b>
+  ═══════════
+  <b>三阶段风控</b>
+  • 事前：规则引擎预判
+  • 事中：实时风控决策
+  • 事后：数据分析审计
+
+  <b>风控维度</b>
+  • 交易金额检查
+  • 交易频率限制
+  • 黑名单拦截
+  • 设备指纹识别
+  • IP地域检查
+  • 反欺诈模型
+end note
+
+' ========================================
+' 图例说明
+' ========================================
+legend bottom left
+  <b>支付中台架构分层说明</b>
+  ═══════════════════════════════════════
+  <b>L1 - 业务系统层：</b>各业务系统接入（电商、广告、直播等）
+  <b>L2 - 收银台层：</b>统一收银台+会员服务+API接入
+  <b>L3 - 支付平台层：</b>支付风控+交易核心+支付核心+渠道网关
+  <b>L4 - 配置&第三方：</b>配置管理平台（左）+ 三方支付平台（右）
+  <b>L5 - 账务清算层：</b>账务系统+清算系统+合规系统
+  <b>L6 - 对账系统层：</b>对账中心
+  ═══════════════════════════════════════
+  <b>核心特性</b>
+  ✓ 两层策略模式（渠道策略 + 支付方式策略）
+  ✓ 数据库配置化（动态加载策略）
+  ✓ 全面风控体系（事前/事中/事后）
+  ✓ 智能路由引擎（成功率/成本/限额/地域）
+  ✓ 渠道自动切换（健康检查+故障转移）
+  ✓ 分布式高可用架构（微服务+容器化）
+  ✓ 完整合规监管体系
+endlegend
+
+@enduml

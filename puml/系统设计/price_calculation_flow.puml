@@ -1,0 +1,409 @@
+@startuml 价格计算详细流程图
+!define LIGHTBLUE #E1F5FE
+!define LIGHTGREEN #E8F5E8
+!define LIGHTYELLOW #FFF9C4
+!define LIGHTPINK #FCE4EC
+!define LIGHTCYAN #E0F2F1
+!define LIGHTORANGE #FFF3E0
+
+title 订单价格计算完整流程 - preOrder_V1_5 (详细版)
+
+actor 用户 as User
+participant "OrderController" as Controller LIGHTBLUE
+participant "FrontOrderServiceImpl" as OrderService LIGHTBLUE
+participant "validatePreOrderRequest" as Validator LIGHTGREEN
+participant "validatePreOrderNormal" as NormalValidator LIGHTGREEN
+participant "ProductAttrValueService" as AttrService LIGHTYELLOW
+participant "CalPreOrderService" as CalService LIGHTPINK
+participant "AbstractCalPreOrderService" as AbstractCal LIGHTPINK
+participant "ChannelProductLibraryService" as ChannelService LIGHTCYAN
+participant "BenefitsProductServiceClientApi" as BenefitsAPI LIGHTCYAN
+participant "BfMineService" as MineService LIGHTCYAN
+participant "PlatformActivityService" as ActivityService LIGHTORANGE
+
+User -> Controller: 预下单请求\n(PreOrderRequest)
+note right of User
+  包含商品信息：
+  - productId
+  - attrValueId
+  - productNum
+  - servePrice (服务商品)
+  - discount (折扣率)
+end note
+
+Controller -> OrderService: preOrder_V1_5(request)
+
+== 第一阶段：基础价格设置 ==
+
+OrderService -> OrderService: 获取用户信息和渠道信息
+note right of OrderService
+  String header = getHeader(CHANNEL_CODE)
+  User user = userService.getInfo()
+  分布式锁防止重复操作
+end note
+
+OrderService -> Validator: validatePreOrderRequest(request, user)
+
+alt 立即购买/服务商品
+    Validator -> NormalValidator: validatePreOrderNormal(detailRequest)
+
+    NormalValidator -> NormalValidator: 校验商品和规格信息
+    NormalValidator -> AttrService: getByIdAndProductIdAndType()
+    AttrService -> NormalValidator: ProductAttrValue
+
+    NormalValidator -> NormalValidator: 设置基础价格
+    note right of NormalValidator
+      **关键价格设置**：
+      detailVo.setPrice(attrValue.getPrice())
+      detailVo.setPayPrice(attrValue.getPrice())
+      detailVo.setOtPrice(attrValue.getOtPrice())
+      detailVo.setCostPrice(attrValue.getCost() * num)
+
+      **特殊处理**：
+      if (服务商品) {
+        detailVo.setPrice(detailRequest.getServePrice())
+      }
+      if (有折扣) {
+        detailVo.setDiscount(detailRequest.getDiscount())
+      }
+    end note
+
+    NormalValidator -> Validator: PreMerchantOrderVo
+else 其他订单类型
+    note right of Validator: 购物车/医院/中医等订单处理
+end
+
+Validator -> OrderService: PreOrderInfoVo
+
+== 第二阶段：动态价格计算 (详细展开) ==
+
+OrderService -> CalService: calPreOrderInfoVo(calPreOrderInfo)
+CalService -> AbstractCal: 开始价格计算流程
+
+=== 1. 渠道专属价格处理 ===
+AbstractCal -> AbstractCal: channelProductPrice(calPreOrderInfo)
+AbstractCal -> AbstractCal: 获取请求头渠道代码
+note right of AbstractCal
+  ServletRequestAttributes sra = getRequestAttributes()
+  String header = getHeader(CHANNEL_CODE)
+end note
+
+alt 有渠道代码
+    AbstractCal -> AbstractCal: 构建条码列表
+    note right of AbstractCal
+      遍历merchantOrderVoList获取所有barCode
+      List<String> barCodes = new ArrayList<>()
+    end note
+
+    AbstractCal -> ChannelService: queryChannelProductByProductIds(barCodes, header)
+    ChannelService -> AbstractCal: List<ChannelProductLibraryProduct>
+
+    AbstractCal -> AbstractCal: 应用渠道价格
+    note right of AbstractCal
+      for each channelProduct {
+        if (channelPrice > 0) {
+          orderInfo.setOtPrice(channelPrice)
+          orderInfo.setPrice(channelPrice)
+          从普通计算中移除该商品
+          加入channelAttrValueIdNumMap
+        }
+      }
+    end note
+else 无渠道代码
+    note right of AbstractCal: 跳过渠道价格处理
+end
+
+=== 2. 药单商品价格计算 ===
+AbstractCal -> AbstractCal: calMedicineListProduct(calPreOrderInfo)
+AbstractCal -> AbstractCal: 判断是否为药单订单
+note right of AbstractCal
+  if (!calPreOrderInfo.isMedicineListOrder()) return
+  if (benefitCardId == null) return
+end note
+
+alt 是药单订单且有权益卡
+    AbstractCal -> AbstractCal: 构建权益查询参数
+    note right of AbstractCal
+      BenefitsProductQueryParam param = new BenefitsProductQueryParam()
+      param.setCardId(benefitCardId)
+      param.setPhone(user.getPhone())
+    end note
+
+    AbstractCal -> BenefitsAPI: selectProductDiscountDrugOrder(param)
+    BenefitsAPI -> AbstractCal: List<BenefitsProductDiscountDrugOrderDTO>
+
+    AbstractCal -> AbstractCal: 分页查询所有药单权益
+    note right of AbstractCal
+      while (还有未查询的药单) {
+        page++
+        继续查询权益信息
+      }
+    end note
+
+    AbstractCal -> AbstractCal: 应用药单价格
+    note right of AbstractCal
+      for each orderInfo {
+        找到对应的药单权益
+        if (有剩余次数) {
+          price = 0 (免费)
+          benefitCardPrice = 原价 × 数量
+        } else {
+          price = 药单价格
+          benefitCardPrice = (原价 - 药单价格) × 数量
+        }
+        设置权益卡ID和服务ID
+      }
+    end note
+else 非药单订单
+    note right of AbstractCal: 跳过药单价格处理
+end
+
+=== 3. 前置处理和权益信息获取 ===
+AbstractCal -> AbstractCal: calBefore(calPreOrderInfo)
+AbstractCal -> AbstractCal: 初始化线程变量
+note right of AbstractCal
+  setThreadLocal.set(new HashSet<>()) // 百万补贴使用的规格ID集合
+  重置所有商品payPrice = 0
+end note
+
+alt 中医问诊订单
+    AbstractCal -> MineService: getUserDiscountInfoByType(userId, 中医订单类型)
+    MineService -> AbstractCal: BfUserDiscountBaseDto (中医权益)
+    AbstractCal -> AbstractCal: userDiscountInfoChinese.set(权益信息)
+else 普通订单
+    AbstractCal -> MineService: getUserDiscountInfoByType(userId, 百万补贴)
+    MineService -> AbstractCal: BfUserDiscountBaseDto (百万补贴权益)
+    AbstractCal -> AbstractCal: 设置百万补贴权益信息
+
+    AbstractCal -> MineService: getUserDiscountInfo(userId)
+    MineService -> AbstractCal: BfUserDiscountBaseDto (购药权益)
+    AbstractCal -> AbstractCal: 设置购药权益信息
+end
+
+=== 4. 寻找最大优惠商品 ===
+AbstractCal -> AbstractCal: findMaxPreferential(calPreOrderInfo)
+AbstractCal -> AbstractCal: 检查用户权益
+note right of AbstractCal
+  if (!userDiscountInfo.getHasManyYearCard()) return
+end note
+
+alt 用户有多年卡权益
+    AbstractCal -> ActivityService: selectProductsInActivity(productIds, activityId)
+    ActivityService -> AbstractCal: List<PlatformActivityProduct>
+
+    AbstractCal -> AbstractCal: 计算最大优惠商品
+    note right of AbstractCal
+      BigDecimal maxPrice = BigDecimal.ZERO
+      for each 活动商品 {
+        优惠金额 = 原价 - 活动价
+        if (优惠金额 > maxPrice) {
+          maxPrice = 优惠金额
+          maxBenefitProductAttrValueId = 商品规格ID
+        }
+      }
+    end note
+else 无多年卡权益
+    note right of AbstractCal: 跳过最大优惠查找
+end
+
+=== 5. 活动价格计算 ===
+AbstractCal -> AbstractCal: calActPrice(calPreOrderInfo)
+AbstractCal -> AbstractCal: 检查用户购买历史
+note right of AbstractCal
+  Integer count = orderService.getCountByUid(userId)
+  if (count > 0) return // 非首次购买用户
+end note
+
+alt 首次购买用户且有最大优惠商品
+    AbstractCal -> ActivityService: queryPlatfromActivityProduct(productId, userId, activityId)
+    ActivityService -> AbstractCal: PlatformActivityProduct
+
+    AbstractCal -> AbstractCal: 应用活动价格
+    note right of AbstractCal
+      for 最大优惠商品 {
+        差价 = 原价 - 活动价
+        if (差价 <= 0) continue
+
+        if (购买数量 <= 限购数量) {
+          payPrice = 活动价 × 购买数量
+          platActPrice = 差价 × 购买数量
+          从待计算中移除
+        } else {
+          payPrice = 活动价 × 限购数量
+          platActPrice = 差价 × 限购数量
+          剩余数量继续计算
+        }
+      }
+    end note
+else 非首次购买或无优惠商品
+    note right of AbstractCal: 跳过活动价格
+end
+
+=== 6. 百万补贴价格计算 ===
+AbstractCal -> AbstractCal: calBenefitMillionPrice(calPreOrderInfo)
+AbstractCal -> AbstractCal: 检查百万补贴权益
+note right of AbstractCal
+  if (无百万补贴权益) return
+  获取剩余额度 surplusDiscountAmount
+  if (剩余额度 <= 0) return
+end note
+
+alt 有百万补贴权益且有剩余额度
+    AbstractCal -> AbstractCal: 构建优惠金额排序Map
+    note right of AbstractCal
+      TreeMap<Integer, List<ProductAttrValue>> 按优惠金额倒序
+      for each 商品 {
+        计算优惠金额 = 原价 - 百万补贴价
+        if (优惠金额 > 0 && 剩余额度 >= 优惠金额) {
+          加入排序Map (优惠金额作为key)
+        }
+      }
+    end note
+
+    AbstractCal -> AbstractCal: 按优惠金额从大到小应用补贴
+    note right of AbstractCal
+      for each 商品 (按优惠金额倒序) {
+        计算可补贴数量 = min(购买数量, 额度/单个优惠金额)
+        if (可补贴数量 > 0) {
+          payPrice += 百万补贴价 × 可补贴数量
+          benefitCardPrice = 优惠金额 × 可补贴数量
+          剩余额度 -= 使用的优惠金额
+          设置百万补贴标记
+          更新剩余计算数量
+        }
+      }
+    end note
+
+    AbstractCal -> AbstractCal: 记录使用百万补贴的规格ID
+    note right of AbstractCal
+      Set<Integer> integers = setThreadLocal.get()
+      integers.add(productAttrValueId)
+    end note
+else 无百万补贴权益或无额度
+    note right of AbstractCal: 跳过百万补贴
+end
+
+=== 7. 权益会员价格计算 ===
+AbstractCal -> AbstractCal: calBenefitPrice(calPreOrderInfo)
+AbstractCal -> AbstractCal: 检查权益用户资格
+note right of AbstractCal
+  if (memberType != 1) return // 非权益用户
+  获取剩余权益额度
+  排除已使用百万补贴的商品
+end note
+
+alt 权益用户且有购药权益
+    AbstractCal -> AbstractCal: 构建权益优惠排序Map
+    note right of AbstractCal
+      TreeMap<Integer, List<ProductAttrValue>> 按优惠金额倒序
+      for each 未用百万补贴的商品 {
+        计算优惠金额 = 原价 - 权益价
+        if (优惠金额 > 0 && 剩余额度 >= 优惠金额) {
+          加入排序Map
+        }
+      }
+    end note
+
+    AbstractCal -> AbstractCal: 按优惠金额应用权益价格
+    note right of AbstractCal
+      for each 商品 (按优惠金额倒序) {
+        计算可权益数量 = min(购买数量, 额度/单个优惠金额)
+        if (可权益数量 > 0) {
+          payPrice += 权益价 × 可权益数量
+          benefitCardPrice = 优惠金额 × 可权益数量
+          剩余额度 -= 使用的优惠金额
+          设置权益卡信息
+          更新剩余计算数量
+        }
+      }
+    end note
+else 非权益用户或无权益
+    note right of AbstractCal: 跳过权益价格
+end
+
+=== 8. 划线价格计算 ===
+AbstractCal -> AbstractCal: calOtPrice(calPreOrderInfo)
+AbstractCal -> AbstractCal: 处理剩余未计算商品
+note right of AbstractCal
+  包含渠道商品和普通剩余商品
+  Map<Integer, Integer> 合并渠道和普通商品数量
+end note
+
+alt 有来源参数 (折扣商品)
+    AbstractCal -> AbstractCal: 按折扣率计算
+    note right of AbstractCal
+      for each 剩余商品 {
+        折扣率 = (100 - discount) / 100
+        最终价格 = 原价 × 折扣率
+        payPrice += 最终价格 × 数量
+        if (price == null) price = 原价
+      }
+    end note
+else 无来源参数 (普通商品)
+    AbstractCal -> AbstractCal: 按原价计算
+    note right of AbstractCal
+      for each 剩余商品 {
+        payPrice += 原价 × 数量
+        if (price == null) price = 原价
+      }
+    end note
+end
+
+=== 9. 结果汇总处理 ===
+AbstractCal -> AbstractCal: dealResultEnd(calPreOrderInfo)
+AbstractCal -> AbstractCal: 计算商户订单汇总
+note right of AbstractCal
+  for each merchantOrder {
+    totalOtPrice = sum(原价 × 数量)
+    proTotalFee = sum(payPrice)
+    costPrice = sum(成本价)
+    benefitCardPrice = sum(权益优惠)
+    platActPrice = sum(活动优惠)
+  }
+end note
+
+AbstractCal -> AbstractCal: 计算整单汇总
+note right of AbstractCal
+  订单总原价 = sum(商户总原价)
+  订单总金额 = sum(商户总金额)
+  权益总优惠 = sum(商户权益优惠)
+  活动总优惠 = sum(商户活动优惠)
+  商品总数量 = sum(所有商品数量)
+end note
+
+AbstractCal -> AbstractCal: 设置权益信息显示
+note right of AbstractCal
+  if (有权益优惠) {
+    设置BfUserDiscountDto显示信息
+    包含卡片信息、剩余额度等
+  }
+
+  清理线程变量：
+  setThreadLocal.remove()
+  userDiscountInfoChinese.remove()
+end note
+
+AbstractCal -> CalService: PreOrderInfoVo (价格计算完成)
+CalService -> OrderService: PreOrderInfoVo
+
+== 第三阶段：附加费用计算 ==
+
+OrderService -> OrderService: 运费计算
+OrderService -> OrderService: 制作费计算
+OrderService -> OrderService: 计算最终支付金额
+OrderService -> OrderService: 缓存订单信息
+OrderService -> Controller: OrderNoResponse
+Controller -> User: 预下单结果
+
+note over User, ActivityService
+  **价格计算优先级和互斥关系**：
+  1. 渠道专属价格 (独立处理，不参与后续计算)
+  2. 药单价格 (独立处理，直接设置最终价格)
+  3. 百万补贴价格 (按优惠金额排序，优先使用)
+  4. 权益会员价格 (排除已用百万补贴的商品)
+  5. 活动价格 (仅首购用户，单商品限制)
+  6. 原价/折扣价格 (处理所有剩余商品)
+
+end note
+
+@enduml

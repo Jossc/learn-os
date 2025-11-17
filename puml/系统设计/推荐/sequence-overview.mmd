@@ -1,0 +1,63 @@
+sequenceDiagram
+    actor User as 用户
+    participant Controller as Controller
+    participant Factory as StrategyFactory
+    participant Strategy as RecommendationStrategy
+    participant Helper as Helper
+    participant DB as Database
+
+    User->>Controller: 请求推荐
+    Note over User,Controller: GET /api/recommend<br/>userId=user123, topN=10
+
+    Controller->>Factory: recommend(request)
+    activate Factory
+
+    alt 未指定策略（自动选择）
+        Factory->>Factory: 按优先级排序所有策略
+        Note over Factory: Hybrid(5) > UserCF(10) > ItemCF(20)<br/> > Content(30) > Hot(90)
+
+        loop 遍历策略列表
+            Factory->>Strategy: isApplicable(request)
+            Strategy-->>Factory: return true/false
+
+            alt 策略适用
+                Factory->>Strategy: recommend(request)
+                activate Strategy
+
+                Strategy->>DB: 查询数据
+                DB-->>Strategy: 返回数据
+
+                Strategy->>Strategy: 执行推荐算法
+                Strategy-->>Factory: 返回推荐结果
+                deactivate Strategy
+
+                alt 结果不为空
+                    Note over Factory: 推荐成功，返回结果
+                else 结果为空且启用降级
+                    Note over Factory: 继续尝试下一策略
+                end
+            end
+        end
+
+    else 指定策略
+        Factory->>Strategy: 直接调用指定策略
+        Strategy->>DB: 查询数据
+        DB-->>Strategy: 返回数据
+        Strategy-->>Factory: 返回结果
+    end
+
+    Factory->>Helper: buildResponse(scores)
+    activate Helper
+    Helper->>DB: 查询药品详情
+    DB-->>Helper: 返回药品信息
+    Helper->>Helper: 填充推荐理由
+    Helper-->>Factory: 返回完整响应
+    deactivate Helper
+
+    Factory-->>Controller: MedicineRecommendationResponse
+    deactivate Factory
+
+    Controller-->>User: 返回JSON结果
+
+    Note over User: 展示推荐药品列表<br/>- 药品信息<br/>- 相似度分数<br/>- 推荐理由
+

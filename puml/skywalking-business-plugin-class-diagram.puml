@@ -1,0 +1,154 @@
+@startuml skywalking-business-plugin-class-diagram
+!theme plain
+
+' 定义接口和抽象类
+interface "SkyWalking PluginDefine" as PluginDefine {
+    + enhanceClass(): ClassMatch
+    + getInstanceMethodsInterceptPoints(): InstanceMethodsInterceptPoint[]
+    + define(): PluginDefine
+}
+
+interface "SkyWalking BootService" as BootService {
+    + prepare(): void
+    + boot(): void
+    + onComplete(): void
+    + shutdown(): void
+    + priority(): int
+}
+
+interface "Spring MethodInterceptor" as MethodInterceptor {
+    + invoke(MethodInvocation): Object
+}
+
+abstract class "AbstractBusinessInterceptor" {
+    # metricRegistry: BusinessMetricRegistry
+    # metricPrefix: String
+    + beforeMethod(): void
+    + afterMethod(): void
+    + handleException(): void
+    # recordMetric(String, Object): void
+    # extractBusinessContext(Object[]): Map
+}
+
+' 核心实现类
+class BusinessPluginDefine {
+    - ENHANCE_CLASSES: String[]
+    + enhanceClass(): ClassMatch
+    + getInstanceMethodsInterceptPoints(): InstanceMethodsInterceptPoint[]
+    + getConstructorsInterceptPoints(): ConstructorInterceptPoint[]
+}
+
+class BusinessBootService {
+    - metricRegistry: BusinessMetricRegistry
+    - springAdvisor: SpringBeanInterceptorAdvisor
+    + prepare(): void
+    + boot(): void
+    + onComplete(): void
+    + shutdown(): void
+    - initializeSpringIntegration(): void
+}
+
+class SpringBeanInterceptorAdvisor {
+    - interceptors: List<AbstractBusinessInterceptor>
+    - applicationContext: ApplicationContext
+    + registerInterceptors(): void
+    + configureSpringAOP(): void
+    + adaptToSpringContext(): void
+    - createProxyBeans(): void
+}
+
+class BusinessMetricRegistry {
+    - meterService: MeterService
+    - registeredMetrics: Map<String, Meter>
+    + registerCounter(String, String[]): Counter
+    + registerGauge(String, String[]): Gauge
+    + registerHistogram(String, String[]): Histogram
+    + getOrCreateMetric(String, MetricType): Meter
+    - validateMetricName(String): boolean
+}
+
+' 业务拦截器实现
+class ConsultMetricsInterceptor {
+    + beforeMethod(): void
+    + afterMethod(): void
+    # extractBusinessContext(): Map
+    - recordConsultStarted(): void
+    - recordConsultCompleted(): void
+    - recordConsultDuration(): void
+}
+
+class PrescriptionMetricsInterceptor {
+    + beforeMethod(): void
+    + afterMethod(): void
+    # extractBusinessContext(): Map
+    - recordPrescriptionCreated(): void
+    - recordPrescriptionValidated(): void
+    - recordDrugInteraction(): void
+}
+
+class OrderMetricsInterceptor {
+    + beforeMethod(): void
+    + afterMethod(): void
+    # extractBusinessContext(): Map
+    - recordOrderCreated(): void
+    - recordOrderPaid(): void
+    - recordOrderDelivered(): void
+}
+
+class WorkorderMetricsInterceptor {
+    + beforeMethod(): void
+    + afterMethod(): void
+    # extractBusinessContext(): Map
+    - recordWorkorderCreated(): void
+    - recordWorkorderAssigned(): void
+    - recordWorkorderResolved(): void
+}
+
+class MetricConstants {
+    + CONSULT_PREFIX: String = "business.consult"
+    + PRESCRIPTION_PREFIX: String = "business.prescription"
+    + ORDER_PREFIX: String = "business.order"
+    + WORKORDER_PREFIX: String = "business.workorder"
+    + DURATION_UNIT: String = "ms"
+    + COUNT_UNIT: String = "count"
+    + AMOUNT_UNIT: String = "yuan"
+}
+
+' 关系定义
+PluginDefine <|.. BusinessPluginDefine
+BootService <|.. BusinessBootService
+MethodInterceptor <|.. AbstractBusinessInterceptor
+AbstractBusinessInterceptor <|-- ConsultMetricsInterceptor
+AbstractBusinessInterceptor <|-- PrescriptionMetricsInterceptor
+AbstractBusinessInterceptor <|-- OrderMetricsInterceptor
+AbstractBusinessInterceptor <|-- WorkorderMetricsInterceptor
+
+BusinessBootService --> SpringBeanInterceptorAdvisor : creates
+BusinessBootService --> BusinessMetricRegistry : initializes
+SpringBeanInterceptorAdvisor --> AbstractBusinessInterceptor : manages
+AbstractBusinessInterceptor --> BusinessMetricRegistry : uses
+BusinessMetricRegistry --> MetricConstants : references
+
+' 组合关系
+BusinessPluginDefine ..> BusinessBootService : configures
+SpringBeanInterceptorAdvisor o-- ConsultMetricsInterceptor
+SpringBeanInterceptorAdvisor o-- PrescriptionMetricsInterceptor
+SpringBeanInterceptorAdvisor o-- OrderMetricsInterceptor
+SpringBeanInterceptorAdvisor o-- WorkorderMetricsInterceptor
+
+note top of BusinessPluginDefine
+  SkyWalking插件入口
+  定义需要增强的类和方法
+end note
+
+note top of BusinessMetricRegistry
+  基于SkyWalking MeterService
+  管理所有业务指标的注册和生命周期
+end note
+
+note bottom of SpringBeanInterceptorAdvisor
+  Spring AOP适配器
+  将SkyWalking拦截器集成到Spring容器
+end note
+
+@enduml
